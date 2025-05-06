@@ -1,4 +1,5 @@
 
+
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { Home, Briefcase, FileText, Settings, PanelLeft, Clock, Users, LogOut } from 'lucide-react'; // Added Clock, Users, LogOut
@@ -34,6 +35,7 @@ const navItems = [
   { href: '/time-tracking', icon: Clock, label: 'Time Tracking' }, // Uncommented Time Tracking
   { href: '/invoices', icon: FileText, label: 'Invoices' },
   { href: '/clients', icon: Users, label: 'Clients' }, // Uncommented Clients link
+  { href: '/settings', icon: Settings, label: 'Settings' }, // Added Settings link
 ];
 
 const TaskBitLogoWhite = () => (
@@ -73,18 +75,6 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           </SidebarMenu>
         </SidebarContent>
         <SidebarFooter className="p-2 border-t border-sidebar-border mt-auto">
-           {/* Settings Link */}
-           <SidebarMenu className="mb-2">
-             <SidebarMenuItem>
-                <Link href="/settings" legacyBehavior passHref>
-                   <SidebarMenuButton className="justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground" tooltip="Settings">
-                      <Settings className="text-sidebar-foreground group-hover:text-sidebar-accent-foreground"/>
-                      <span className="text-sidebar-foreground group-hover:text-sidebar-accent-foreground">Settings</span>
-                   </SidebarMenuButton>
-                </Link>
-             </SidebarMenuItem>
-           </SidebarMenu>
-
            {/* User Profile Dropdown/Button */}
            <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -99,10 +89,12 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             <DropdownMenuContent align="end" side="right" sideOffset={10} className="w-56 bg-background text-foreground border-border">
               <DropdownMenuLabel>My Account</DropdownMenuLabel>
               <DropdownMenuSeparator className="bg-border"/>
-              <DropdownMenuItem>
-                <Settings className="w-4 h-4 mr-2" />
-                Settings
-              </DropdownMenuItem>
+               <Link href="/settings" passHref>
+                    <DropdownMenuItem>
+                        <Settings className="w-4 h-4 mr-2" />
+                        Settings
+                    </DropdownMenuItem>
+               </Link>
               <DropdownMenuItem>
                 <LogOut className="w-4 h-4 mr-2" />
                 Log out
@@ -136,4 +128,5 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     </SidebarProvider>
   );
 }
+
 

@@ -23,7 +23,8 @@ import {
   type Task,
   type Invoice,
   type InvoiceItem,
-  type TimeEntry // Added
+  type TimeEntry, // Added
+  getProjects // Added import
 } from "./definitions";
 import { sendEmail } from '@/services/email'; // Assuming this service exists
 
@@ -314,4 +315,3 @@ export async function deleteTimeEntryAction(id: string) {
     throw new Error("Failed to delete time entry.");
   }
 }
-
