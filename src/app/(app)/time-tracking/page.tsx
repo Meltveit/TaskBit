@@ -14,7 +14,8 @@ import { Calendar } from '@/components/ui/calendar';
 import { format, differenceInSeconds } from 'date-fns';
 import { cn } from '@/lib/utils';
 import type { Project, Task, TimeEntry } from '@/lib/definitions'; // Use existing definitions
-import { getProjects, getTasksByProjectId, getTimeEntries, getTimeReport, createTimeEntryAction, updateTimeEntryAction, deleteTimeEntryAction } from '@/lib/definitions'; // Fetch real data
+import { getProjects, getTasksByProjectId, getTimeEntries, getTimeReport } from '@/lib/definitions'; // Fetch real data definitions
+import { createTimeEntryAction, updateTimeEntryAction, deleteTimeEntryAction } from '@/lib/actions'; // Import actions correctly
 import { useToast } from '@/hooks/use-toast'; // For notifications
 
 // Helper function to format seconds into HH:MM:SS
@@ -482,3 +483,4 @@ export default function TimeTrackingPage() {
 
 
     
+
