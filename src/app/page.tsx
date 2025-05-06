@@ -1,3 +1,4 @@
+
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
@@ -63,7 +64,7 @@ export default async function LandingPage() {
   const navLinks = [
     { href: '#features', label: 'Features' },
     { href: '#pricing', label: 'Pricing' },
-    { href: '/dashboard', label: 'Login' }, // Assuming /dashboard is login for existing users
+    { href: '/auth/login', label: 'Login' }, // Updated Login link
   ];
 
 
@@ -81,7 +82,7 @@ export default async function LandingPage() {
                 {link.label}
               </Link>
             ))}
-            <Link href="/signup" passHref>
+             <Link href="/auth/signup" passHref> {/* Updated Sign Up link */}
               <Button className="bg-accent hover:bg-accent/90 text-accent-foreground rounded-lg shadow hover:shadow-md">
                 Sign Up
               </Button>
@@ -101,7 +102,7 @@ export default async function LandingPage() {
                       {link.label}
                     </Link>
                   ))}
-                  <Link href="/signup" passHref>
+                   <Link href="/auth/signup" passHref> {/* Updated Sign Up link */}
                     <Button className="bg-accent hover:bg-accent/90 text-accent-foreground w-full rounded-lg shadow hover:shadow-md">
                       Sign Up
                     </Button>
@@ -123,7 +124,7 @@ export default async function LandingPage() {
             Manage projects, track time, and invoice clients in one place.
           </p>
           <div className="flex flex-col sm:flex-row justify-center items-center gap-4">
-            <Link href="/signup" passHref>
+             <Link href="/auth/signup" passHref> {/* Updated Sign Up link */}
               <Button size="lg" className="bg-accent hover:bg-accent/90 text-accent-foreground rounded-lg shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-300">
                 Start Free Trial <ArrowRight className="ml-2 w-5 h-5" />
               </Button>

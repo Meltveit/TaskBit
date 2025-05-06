@@ -25,7 +25,7 @@ export function PricingCard({ plan }: PricingCardProps) {
     // In a real app, this would redirect to signup or a payment page
     // For now, just show an alert and redirect
     alert(`Redirecting to signup for plan: ${planId}`);
-     router.push('/signup'); // Use router.push for navigation
+     router.push('/auth/signup'); // Use router.push for navigation to the auth signup page
   };
 
   return (
