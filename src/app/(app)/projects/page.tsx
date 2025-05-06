@@ -1,76 +1,139 @@
+
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { PlusCircle, Edit, Trash2, Eye } from 'lucide-react';
-import type { Project } from '@/lib/definitions';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Card, CardContent } from '@/components/ui/card'; // Keep Card for the empty state
+import { PlusCircle, Edit, Trash2, Briefcase as LucideBriefcase, List, KanbanSquare } from 'lucide-react'; // Renamed imported icon
+import type { Project, Task } from '@/lib/definitions';
 import { getProjects } from '@/lib/definitions';
 import { Badge } from '@/components/ui/badge';
 import { DeleteProjectButton } from '@/components/delete-buttons';
+import { format } from 'date-fns';
+
+// Helper function to determine project deadline (e.g., latest task due date)
+const getProjectDeadline = (tasks: Task[]): string | null => {
+  if (!tasks || tasks.length === 0) return null;
+
+  const dueDates = tasks
+    .map(task => task.dueDate ? new Date(task.dueDate).getTime() : 0)
+    .filter(date => date > 0);
+
+  if (dueDates.length === 0) return null;
+
+  const latestDueDate = new Date(Math.max(...dueDates));
+  return format(latestDueDate, 'MMM dd, yyyy');
+};
+
+// Helper function to calculate task completion
+const getTasksCompleted = (tasks: Task[]): string => {
+  if (!tasks || tasks.length === 0) return "0/0";
+  const completed = tasks.filter(task => task.status === 'done').length;
+  return `${completed}/${tasks.length}`;
+};
+
+// Helper to get status badge variant
+const statusBadgeVariant = (status: Project['status']) => {
+    switch (status) {
+      case 'active': return 'bg-green-100 text-green-800 border-green-300 hover:bg-green-200'; // Use lighter background for tags
+      case 'completed': return 'bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-200';
+      case 'archived': return 'bg-gray-100 text-gray-800 border-gray-300 hover:bg-gray-200';
+      default: return 'outline';
+    }
+  };
+
 
 export default async function ProjectsPage() {
   const projects = await getProjects();
+  const currentView = 'list'; // Default to list view for now
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">Projects</h1>
-        <Link href="/projects/new">
-          <Button>
-            <PlusCircle className="mr-2 h-4 w-4" /> Create New Project
+        <h1 className="text-2xl font-bold tracking-tight text-primary">Projects</h1>
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="secondary">
+            {currentView === 'list' ? <KanbanSquare className="mr-2 h-4 w-4" /> : <List className="mr-2 h-4 w-4" />}
+            Toggle View
           </Button>
-        </Link>
+          <Link href="/projects/new">
+            {/* Updated button style to use accent color */}
+            <Button className="bg-accent hover:bg-accent/90 text-accent-foreground">
+              <PlusCircle className="mr-2 h-4 w-4" /> Create New Project
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {projects.length > 0 ? (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {projects.map((project) => (
-            <Card key={project.id} className="flex flex-col shadow-lg hover:shadow-xl transition-shadow duration-300">
-              <CardHeader>
-                <div className="flex justify-between items-start">
-                  <CardTitle className="text-xl">{project.name}</CardTitle>
-                  <Badge 
-                    variant={project.status === 'active' ? 'default' : project.status === 'completed' ? 'secondary' : 'outline'}
-                    className={`capitalize ${project.status === 'active' ? 'bg-green-500 text-white' : project.status === 'completed' ? 'bg-blue-500 text-white' : 'bg-gray-500 text-white'}`}
-                  >
-                    {project.status}
-                  </Badge>
-                </div>
-                <CardDescription className="h-12 overflow-hidden text-ellipsis">
-                  {project.description || 'No description provided.'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex-grow">
-                <p className="text-sm text-muted-foreground">
-                  Tasks: {project.tasks.length}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Last Updated: {new Date(project.updatedAt).toLocaleDateString()}
-                </p>
-              </CardContent>
-              <CardFooter className="flex justify-end gap-2 border-t pt-4">
-                 <Link href={`/projects/${project.id}`}>
-                  <Button variant="outline" size="sm">
-                    <Eye className="mr-1 h-4 w-4" /> View
-                  </Button>
-                </Link>
-                <Link href={`/projects/${project.id}/edit`}>
-                  <Button variant="secondary" size="sm">
-                    <Edit className="mr-1 h-4 w-4" /> Edit
-                  </Button>
-                </Link>
-                <DeleteProjectButton projectId={project.id} />
-              </CardFooter>
-            </Card>
-          ))}
-        </div>
+        <Card className="shadow-md">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Project Name</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-center">Tasks Completed</TableHead>
+                <TableHead>Deadline</TableHead>
+                <TableHead>Last Updated</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {projects.map((project) => {
+                const deadline = getProjectDeadline(project.tasks);
+                const tasksCompleted = getTasksCompleted(project.tasks);
+
+                return (
+                <TableRow key={project.id}>
+                  <TableCell className="font-medium">
+                     <Link href={`/projects/${project.id}`} className="hover:underline text-foreground">
+                        {project.name}
+                     </Link>
+                     <p className="text-xs text-muted-foreground truncate max-w-xs">{project.description || 'No description'}</p>
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant="outline"
+                      className={`capitalize text-xs ${statusBadgeVariant(project.status)}`}
+                    >
+                      {project.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-center text-muted-foreground">{tasksCompleted}</TableCell>
+                  <TableCell className="text-muted-foreground">{deadline || 'N/A'}</TableCell>
+                  <TableCell className="text-muted-foreground">{format(new Date(project.updatedAt), 'PP')}</TableCell>
+                  <TableCell className="text-right">
+                     <div className="flex justify-end gap-2">
+                       {/* Edit button styled as secondary (Teal) */}
+                      <Link href={`/projects/${project.id}/edit`}>
+                        <Button variant="secondary" size="sm">
+                          <Edit className="mr-1 h-4 w-4" /> Edit
+                        </Button>
+                      </Link>
+                      <DeleteProjectButton projectId={project.id} />
+                     </div>
+                  </TableCell>
+                </TableRow>
+              )})}
+            </TableBody>
+          </Table>
+        </Card>
       ) : (
-        <Card className="col-span-full text-center py-12">
+        <Card className="col-span-full text-center py-12 shadow-md">
           <CardContent>
-            <Briefcase className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-xl font-semibold mb-2">No Projects Yet</h3>
+            {/* Use the renamed local SVG component */}
+            <BriefcaseIconHelper className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-xl font-semibold mb-2 text-foreground">No Projects Yet</h3>
             <p className="text-muted-foreground mb-4">Start by creating your first project.</p>
             <Link href="/projects/new">
-              <Button>
+              {/* Updated button style to use accent color */}
+              <Button className="bg-accent hover:bg-accent/90 text-accent-foreground">
                 <PlusCircle className="mr-2 h-4 w-4" /> Create Project
               </Button>
             </Link>
@@ -81,7 +144,8 @@ export default async function ProjectsPage() {
   );
 }
 
-function Briefcase(props: React.SVGProps<SVGSVGElement>) {
+// Renamed the local SVG component to avoid conflict
+function BriefcaseIconHelper(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg
       {...props}
@@ -100,3 +164,4 @@ function Briefcase(props: React.SVGProps<SVGSVGElement>) {
     </svg>
   )
 }
+

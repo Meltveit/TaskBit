@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -69,7 +70,7 @@ export function ProjectForm({ project }: ProjectFormProps) {
     } catch (error) {
       toast({
         title: "Error",
-        description: `Failed to ${isEditing ? 'update' : 'create'} project. Please try again.`,
+        description: `Failed to ${isEditing ? 'update' : 'create'} project. Please try again. Error: ${error instanceof Error ? error.message : String(error)}`,
         variant: "destructive",
       });
     }
@@ -133,14 +134,16 @@ export function ProjectForm({ project }: ProjectFormProps) {
             </FormItem>
           )}
         />
-        <Button type="submit" disabled={form.formState.isSubmitting}>
-          {form.formState.isSubmitting ? (isEditing ? "Saving..." : "Creating...") : (isEditing ? "Save Changes" : "Create Project")}
-        </Button>
-         {isEditing && (
-          <Button type="button" variant="outline" onClick={() => router.back()} className="ml-2">
+        <div className="flex justify-end gap-2">
+           {/* Use ghost variant for Cancel button */}
+          <Button type="button" variant="ghost" onClick={() => router.back()}>
             Cancel
           </Button>
-        )}
+          {/* Use accent (Yellow) for primary action */}
+          <Button type="submit" disabled={form.formState.isSubmitting} className="bg-accent hover:bg-accent/90 text-accent-foreground">
+            {form.formState.isSubmitting ? (isEditing ? "Saving..." : "Creating...") : (isEditing ? "Save Changes" : "Create Project")}
+          </Button>
+        </div>
       </form>
     </Form>
   );
