@@ -6,6 +6,7 @@ export type Project = {
   updatedAt: string; // ISO date string
   tasks: Task[];
   status: 'active' | 'completed' | 'archived';
+  clientId?: string; // Added clientId to link projects to clients
 };
 
 export type Task = {
@@ -17,6 +18,8 @@ export type Task = {
   createdAt: string; // ISO date string
   updatedAt: string; // ISO date string
   dueDate?: string; // ISO date string - Added for deadlines
+  // Add requiresApproval flag if needed for client portal logic
+  // requiresApproval?: boolean;
 };
 
 export type Invoice = {
@@ -24,6 +27,7 @@ export type Invoice = {
   projectId?: string; // Optional: invoice might not be tied to a project
   clientName: string;
   clientEmail: string;
+  clientId?: string; // Added clientId to link invoices to clients
   invoiceNumber: string;
   issueDate: string; // ISO date string
   dueDate: string; // ISO date string
@@ -48,7 +52,7 @@ export type ActivityLog = {
     id: string;
     timestamp: string; // ISO date string
     type: 'project' | 'task' | 'invoice' | 'time'; // Added 'time' type
-    action: 'created' | 'updated' | 'deleted' | 'completed' | 'sent' | 'started' | 'stopped'; // Added timer actions
+    action: 'created' | 'updated' | 'deleted' | 'completed' | 'sent' | 'started' | 'stopped' | 'approved'; // Added 'approved' action
     description: string; // e.g., "Started timer for Task X"
 };
 
@@ -72,6 +76,7 @@ let projectsStore: Project[] = [
   {
     id: '1',
     name: 'Website Redesign',
+    clientId: 'client-acme', // Link to Acme Corp
     description: 'Complete redesign of the company website.',
     createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), // 5 days ago
     updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(), // 1 day ago
@@ -84,6 +89,7 @@ let projectsStore: Project[] = [
   {
     id: '2',
     name: 'Mobile App Development',
+    clientId: 'client-beta', // Link to Beta Solutions
     description: 'Develop a new mobile application for iOS and Android.',
      createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(), // 10 days ago
     updatedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), // 2 days ago
@@ -96,6 +102,7 @@ let projectsStore: Project[] = [
    {
     id: '3',
     name: 'Marketing Campaign',
+    clientId: 'client-acme', // Link to Acme Corp
     description: 'Launch Q3 marketing campaign.',
      createdAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(), // 15 days ago
     updatedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), // 3 days ago
@@ -109,6 +116,7 @@ let projectsStore: Project[] = [
 let invoicesStore: Invoice[] = [
   {
     id: 'inv-001',
+    clientId: 'client-acme',
     clientName: 'Acme Corp',
     clientEmail: 'contact@acme.com',
     invoiceNumber: 'INV-2024-001',
@@ -125,7 +133,8 @@ let invoicesStore: Invoice[] = [
   },
   {
     id: 'inv-002',
-    projectId: '1',
+    clientId: 'client-beta',
+    projectId: '1', // Mistake in original data, should be linked to project 2? Let's assume it links to project 1 for Beta for now
     clientName: 'Beta Solutions',
     clientEmail: 'info@beta.com',
     invoiceNumber: 'INV-2024-002',
@@ -141,6 +150,7 @@ let invoicesStore: Invoice[] = [
   },
   {
     id: 'inv-003',
+    clientId: 'client-gamma',
     projectId: '2',
     clientName: 'Gamma Inc',
     clientEmail: 'finance@gamma.com',
@@ -151,7 +161,24 @@ let invoicesStore: Invoice[] = [
       { id: 'item4', description: 'App Dev Sprint 1', quantity: 1, unitPrice: 3000, total: 3000 },
     ],
     totalAmount: 3000,
-    status: 'draft',
+    status: 'draft', // Client shouldn't see drafts, but included for completeness
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+   {
+    id: 'inv-004',
+    clientId: 'client-acme',
+    projectId: '3',
+    clientName: 'Acme Corp',
+    clientEmail: 'contact@acme.com',
+    invoiceNumber: 'INV-2024-004',
+    issueDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), // 2 days ago
+    dueDate: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000).toISOString(), // Due in 12 days
+    items: [
+      { id: 'item5', description: 'Marketing Campaign Setup', quantity: 1, unitPrice: 800, total: 800 },
+    ],
+    totalAmount: 800,
+    status: 'sent',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -163,9 +190,17 @@ let timeEntriesStore: TimeEntry[] = [
   { id: 'te2', projectId: '2', projectName: 'Mobile App Development', taskId: 't3', taskName: 'User Authentication', startTime: new Date(Date.now() - 28 * 60 * 60 * 1000).toISOString(), endTime: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(), durationSeconds: 10800, notes: 'Setup Firebase Auth', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
 ];
 
+// Mock report data (for main dashboard, not client portal)
+const dummyReportData = [
+  { name: 'Website Redesign', hours: 15.5 },
+  { name: 'Mobile App Development', hours: 20.0 },
+  { name: 'Marketing Campaign', hours: 8.0 },
+];
+
 
 // Mock recent activity log
 let activityLogStore: ActivityLog[] = [
+  { id: 'a7', timestamp: new Date(Date.now() - 1 * 60 * 1000).toISOString(), type: 'task', action: 'approved', description: 'Client approved Task: Design Review' }, // Added approval log
   { id: 'a1', timestamp: new Date(Date.now() - 5 * 60 * 1000).toISOString(), type: 'invoice', action: 'created', description: 'Created Invoice INV-2024-003' },
   { id: 'a2', timestamp: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(), type: 'task', action: 'completed', description: 'Completed Task: Create Ad Copy' },
    { id: 'a6', timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), type: 'time', action: 'stopped', description: 'Stopped timer for: User Authentication (3h 0m)' }, // Added time entry log
@@ -320,7 +355,7 @@ export const deleteInvoice = async (id: string): Promise<boolean> => {
 };
 
 
-// Time Tracking Functions (New)
+// Time Tracking Functions
 export const getTimeEntries = async (): Promise<TimeEntry[]> => {
   // Add sorting by date descending
   return [...timeEntriesStore].sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
@@ -381,7 +416,7 @@ export const getTimeReport = async (filters: { fromDate?: string, toDate?: strin
 };
 
 
-// New data fetching functions for Dashboard
+// --- Data Fetching for Dashboard ---
 
 // Get total weekly hours (mock implementation using time entries)
 export const getWeeklyHoursTracked = async (): Promise<number> => {
@@ -420,9 +455,29 @@ export const getUpcomingTasks = async (limit: number = 3): Promise<Task[]> => {
     return upcoming.slice(0, limit);
 };
 
-
 // Get recent activity logs
 export const getRecentActivity = async (limit: number = 5): Promise<ActivityLog[]> => {
     // Assuming activityLogStore is already sorted by timestamp descending
     return Promise.resolve(activityLogStore.slice(0, limit));
+};
+
+// --- Data Fetching for Client Portal ---
+
+// Fetch projects assigned to a specific client
+export const getProjectsForClient = async (clientId: string): Promise<Project[]> => {
+  return projectsStore.filter(p => p.clientId === clientId);
+};
+
+// Fetch tasks for projects assigned to a specific client
+export const getTasksForClient = async (clientId: string): Promise<Task[]> => {
+  const clientProjects = await getProjectsForClient(clientId);
+  const projectIds = clientProjects.map(p => p.id);
+  return projectsStore
+    .flatMap(p => p.tasks) // Get all tasks from all projects
+    .filter(task => projectIds.includes(task.projectId)); // Filter tasks belonging to client's projects
+};
+
+// Fetch invoices for a specific client (excluding drafts)
+export const getInvoicesForClient = async (clientId: string): Promise<Invoice[]> => {
+  return invoicesStore.filter(inv => inv.clientId === clientId && inv.status !== 'draft');
 };

@@ -1,3 +1,4 @@
+
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { Home, Briefcase, FileText, Settings, PanelLeft, Clock, Users, LogOut } from 'lucide-react'; // Added Clock, Users, LogOut
@@ -32,7 +33,7 @@ const navItems = [
   { href: '/projects', icon: Briefcase, label: 'Projects' },
   { href: '/time-tracking', icon: Clock, label: 'Time Tracking' }, // Uncommented Time Tracking
   { href: '/invoices', icon: FileText, label: 'Invoices' },
-  // { href: '/clients', icon: Users, label: 'Clients' }, // Uncomment when page exists
+  { href: '/clients', icon: Users, label: 'Clients' }, // Uncommented Clients link
 ];
 
 const TaskBitLogoWhite = () => (
@@ -83,7 +84,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
                 </Link>
              </SidebarMenuItem>
            </SidebarMenu>
-           
+
            {/* User Profile Dropdown/Button */}
            <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -135,3 +136,4 @@ export default function AppLayout({ children }: { children: ReactNode }) {
     </SidebarProvider>
   );
 }
+
