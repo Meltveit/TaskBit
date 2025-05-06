@@ -9,7 +9,9 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { TestimonialSlider } from '@/components/testimonial-slider';
+import { PricingCard } from '@/components/pricing-card'; // Import the new client component
 import type { Testimonial } from '@/components/testimonial-slider';
+import type { PricingPlan } from '@/components/pricing-card'; // Import PricingPlan type
 
 const features = [
   { title: 'Project Management', description: 'Organize projects, assign tasks, and track progress effortlessly.', icon: <Briefcase className="w-8 h-8 text-secondary" />, id: 'pm' },
@@ -20,7 +22,7 @@ const features = [
   { title: 'Collaboration', description: 'Communicate with your team and clients seamlessly.', icon: <MessageSquare className="w-8 h-8 text-secondary" />, id: 'col' },
 ];
 
-const pricingPlans = [
+const pricingPlansData: PricingPlan[] = [
   { name: 'Free Tier', price: '$0', features: ['1 Project', 'Basic Task Management', 'Community Support'], id: 'free' },
   { name: 'Basic', price: '$10/month', features: ['5 Projects', 'Advanced Task Management', 'Time Tracking', 'Email Support'], id: 'basic' },
   { name: 'Pro', price: '$20/month', features: ['Unlimited Projects', 'All Basic Features', 'Invoicing', 'Client Portal', 'Priority Support'], id: 'pro' },
@@ -34,27 +36,15 @@ const testimonialsData: Testimonial[] = [
 
 
 // Mock API calls
-const fetchPricingPlans = async () => {
-  // console.log("API Call: GET /api/plans"); // For analytics/logging
+const fetchPricingPlans = async (): Promise<PricingPlan[]> => {
   // Simulate API call
   await new Promise(resolve => setTimeout(resolve, 100));
-  return pricingPlans;
+  return pricingPlansData;
 };
 
-const submitContactForm = async (formData: any) => {
-  console.log("API Call: POST /api/contact", formData); // For analytics/logging
-  // Simulate API call
-  await new Promise(resolve => setTimeout(resolve, 500));
-  return { success: true, message: "Form submitted successfully!" };
-};
-
-const handleSubscription = (planId: string) => {
-  console.log(`API Call: POST /subscribe with planId: ${planId}`); // For analytics/logging
-  // In a real app, this would redirect to signup or a payment page
-  // For now, just log and maybe show a toast
-  alert(`Subscribing to plan: ${planId}`);
-  // router.push('/signup'); // If signup page exists
-};
+// This is moved to the client component
+// const submitContactForm = async (formData: any) => { ... };
+// const handleSubscription = (planId: string) => { ... };
 
 
 export default async function LandingPage() {
@@ -75,7 +65,7 @@ export default async function LandingPage() {
     { href: '#pricing', label: 'Pricing' },
     { href: '/dashboard', label: 'Login' }, // Assuming /dashboard is login for existing users
   ];
-  
+
 
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
@@ -145,11 +135,11 @@ export default async function LandingPage() {
             </Link>
           </div>
           <div className="mt-16 max-w-4xl mx-auto">
-            <Image 
-              src="https://picsum.photos/1200/600?random=1" 
-              alt="TaskBit Dashboard Preview" 
-              width={1200} 
-              height={600} 
+            <Image
+              src="https://picsum.photos/1200/600?random=1"
+              alt="TaskBit Dashboard Preview"
+              width={1200}
+              height={600}
               className="rounded-lg shadow-2xl"
               data-ai-hint="dashboard productivity"
               priority
@@ -190,30 +180,7 @@ export default async function LandingPage() {
           </h2>
           <div className="grid md:grid-cols-3 gap-8">
             {currentPricingPlans.map((plan) => (
-              <Card key={plan.id} className="bg-card border border-muted/50 shadow-lg hover:shadow-xl transition-shadow duration-300 flex flex-col rounded-lg">
-                <CardHeader className="text-center">
-                  <CardTitle className="text-2xl text-primary">{plan.name}</CardTitle>
-                  <p className="text-4xl font-bold text-foreground my-4">{plan.price}</p>
-                </CardHeader>
-                <CardContent className="flex-grow">
-                  <ul className="space-y-2">
-                    {plan.features.map((item, index) => (
-                      <li key={index} className="flex items-center text-muted-foreground">
-                        <CheckCircle className="w-5 h-5 text-secondary mr-2" />
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-                <div className="p-6 mt-auto">
-                  <Button 
-                    onClick={() => handleSubscription(plan.id)}
-                    className="w-full bg-accent hover:bg-accent/90 text-accent-foreground rounded-lg shadow hover:shadow-md"
-                  >
-                    Choose Plan
-                  </Button>
-                </div>
-              </Card>
+              <PricingCard key={plan.id} plan={plan} /> // Use the client component here
             ))}
           </div>
            <p className="text-center mt-8 text-muted-foreground">
