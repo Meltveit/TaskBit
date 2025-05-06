@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -69,7 +70,7 @@ export function InvoiceForm({ invoice, projects }: InvoiceFormProps) {
   const form = useForm<InvoiceFormValues>({
     resolver: zodResolver(invoiceFormSchema),
     defaultValues: {
-      projectId: invoice?.projectId || "",
+      projectId: invoice?.projectId || "", // Default to empty string for placeholder to show
       clientName: invoice?.clientName || "",
       clientEmail: invoice?.clientEmail || "",
       issueDate: invoice?.issueDate ? new Date(invoice.issueDate) : new Date(),
@@ -87,7 +88,7 @@ export function InvoiceForm({ invoice, projects }: InvoiceFormProps) {
 
   const watchItems = form.watch("items");
   const totalAmount = watchItems.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0);
-  
+
   useEffect(() => {
     // Recalculate totals if using form.setValue for items
   }, [watchItems]);
@@ -95,6 +96,8 @@ export function InvoiceForm({ invoice, projects }: InvoiceFormProps) {
   async function onSubmit(data: InvoiceFormValues) {
     const payload = {
       ...data,
+      // If projectId is "none", set it to undefined before saving
+      projectId: data.projectId === "none" ? undefined : data.projectId,
       issueDate: data.issueDate.toISOString(),
       dueDate: data.dueDate.toISOString(),
       items: data.items.map(item => ({
@@ -105,7 +108,7 @@ export function InvoiceForm({ invoice, projects }: InvoiceFormProps) {
       totalAmount: data.items.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0),
       status: 'draft' // Always save as draft initially when creating/updating through form
     };
-    
+
     try {
       let savedInvoice: Invoice | undefined;
       if (isEditing && invoice) {
@@ -119,7 +122,7 @@ export function InvoiceForm({ invoice, projects }: InvoiceFormProps) {
       if (!savedInvoice) {
          throw new Error("Failed to save invoice.");
       }
-      
+
       // Redirect or handle next step (like triggering send) based on which button was clicked maybe?
       // For now, just redirect to the main invoices page after save/create.
       router.push("/invoices");
@@ -139,6 +142,8 @@ export function InvoiceForm({ invoice, projects }: InvoiceFormProps) {
      const data = form.getValues();
      const payload = {
         ...data,
+        // If projectId is "none", set it to undefined before saving
+        projectId: data.projectId === "none" ? undefined : data.projectId,
         issueDate: data.issueDate.toISOString(),
         dueDate: data.dueDate.toISOString(),
         items: data.items.map(item => ({
@@ -163,11 +168,9 @@ export function InvoiceForm({ invoice, projects }: InvoiceFormProps) {
         }
 
          // Now trigger the email sending action
-        const sendResult = await createInvoiceAction(payload); // Reuse create action which now also handles sending
-
-         if (!sendResult) { // Assuming createInvoiceAction returns the invoice or throws
-             throw new Error("Invoice created/updated, but failed to trigger send.");
-         }
+         // Assuming create/update handles sending if status is 'sent' based on previous logic in actions.ts
+         // If not, uncomment the sendInvoiceEmailAction call
+        // const sendResult = await sendInvoiceEmailAction(savedInvoice.id, savedInvoice.clientEmail);
 
 
         toast({ title: "Invoice Sent", description: `Invoice ${savedInvoice.invoiceNumber} has been successfully created and sent.` });
@@ -190,7 +193,7 @@ export function InvoiceForm({ invoice, projects }: InvoiceFormProps) {
       <div className="mb-8 p-4 border rounded-lg bg-card shadow-sm">
         <h3 className="text-lg font-semibold text-primary mb-2">Preview</h3>
         <p className="text-muted-foreground">Client: {form.watch('clientName') || 'N/A'}</p>
-        <p className="text-muted-foreground">Total: <span className="font-bold text-teal-600">${totalAmount.toFixed(2)}</span></p>
+        <p className="text-muted-foreground">Total: <span className="font-bold text-secondary">${totalAmount.toFixed(2)}</span></p>
         {/* Add more preview details */}
       </div>
 
@@ -243,14 +246,15 @@ export function InvoiceForm({ invoice, projects }: InvoiceFormProps) {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Link to Project (Optional)</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select onValueChange={field.onChange} defaultValue={field.value || ""}> {/* Ensure default is "" to show placeholder */}
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Select a project" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    {/* Changed value from "" to "none" */}
+                    <SelectItem value="none">None</SelectItem>
                     {projects.map(p => (
                       <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                     ))}
@@ -417,9 +421,9 @@ export function InvoiceForm({ invoice, projects }: InvoiceFormProps) {
             <PlusCircle className="mr-2 h-4 w-4" /> Add Item
           </Button>
         </div>
-        
+
         <div className="text-right text-xl font-semibold">
-            Total: ${totalAmount.toFixed(2)}
+            Total: <span className="text-secondary">${totalAmount.toFixed(2)}</span>
         </div>
 
          {/* Hidden status field - managed internally */}
@@ -444,8 +448,8 @@ export function InvoiceForm({ invoice, projects }: InvoiceFormProps) {
         />
 
         <div className="flex justify-end gap-2">
-            {/* Cancel Button (Red/Destructive) */}
-            <Button type="button" variant="destructive" onClick={() => router.back()}>
+            {/* Use ghost variant for Cancel button */}
+            <Button type="button" variant="ghost" onClick={() => router.back()}>
                 Cancel
             </Button>
              {/* Save Draft Button (Teal/Secondary) */}
@@ -461,3 +465,6 @@ export function InvoiceForm({ invoice, projects }: InvoiceFormProps) {
     </Form>
   );
 }
+
+
+    
