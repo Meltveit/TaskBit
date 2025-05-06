@@ -32,7 +32,7 @@ body {
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 222 28% 28%; /* Dark Gray (#374151) for borders */
+    --border: 215 28% 93%; /* Light Gray (#E5E7EB) for borders */
     --input: 215 28% 93%; /* Light Gray (#E5E7EB) for input backgrounds */
     --ring: 221 63% 33%; /* Deep Blue for focus rings */
 
@@ -44,17 +44,19 @@ body {
     --chart-4: 222 47% 11%; /* Dark Gray */
     --chart-5: 215 28% 93%; /* Light Gray */
     
-    --sidebar-background: 0 0% 100%; /* Clean White for sidebar */
-    --sidebar-foreground: 222 47% 11%; /* Dark Gray for sidebar text */
-    --sidebar-primary: 221 63% 33%; /* Deep Blue for active sidebar items */
-    --sidebar-primary-foreground: 0 0% 100%; /* White for active sidebar item text */
-    --sidebar-accent: 215 28% 93%; /* Light Gray for sidebar hover */
-    --sidebar-accent-foreground: 222 47% 11%; /* Dark Gray for sidebar hover text */
-    --sidebar-border: 215 20% 85%; /* Lighter Gray for subtle sidebar borders */
-    --sidebar-ring: 221 63% 33%; /* Deep Blue for focus rings in sidebar */
+    /* Sidebar variables updated based on prompt */
+    --sidebar-background: 221 63% 33%; /* Deep Blue (#1E3A8A) */
+    --sidebar-foreground: 0 0% 100%; /* White */
+    --sidebar-primary: 43 95% 57%; /* Warm Yellow (#FBBF24) for active/accent? Using accent */
+    --sidebar-primary-foreground: 222 47% 11%; /* Dark Gray for text on yellow */
+    --sidebar-accent: 170 66% 52%; /* Soft Teal (#2DD4BF) for hover */
+    --sidebar-accent-foreground: 222 47% 11%; /* Dark Gray text for hover */
+    --sidebar-border: 221 63% 45%; /* Lighter Deep Blue border */
+    --sidebar-ring: 170 66% 52%; /* Soft Teal for focus rings */
   }
 
   .dark {
+    /* Dark theme variables - adjust if dark mode is needed later */
     --background: 222 47% 11%; /* Dark Gray */
     --foreground: 0 0% 98%; /* White */
 
@@ -89,14 +91,15 @@ body {
     --chart-4: 0 0% 98%;
     --chart-5: 222 47% 30%;
 
-    --sidebar-background: 222 47% 11%; /* Dark Gray for sidebar */
-    --sidebar-foreground: 0 0% 98%; /* White for sidebar text */
-    --sidebar-primary: 221 63% 45%; /* Lighter Deep Blue */
-    --sidebar-primary-foreground: 0 0% 100%; /* White */
-    --sidebar-accent: 222 47% 20%; /* Dark Muted Gray */
-    --sidebar-accent-foreground: 0 0% 98%; /* White */
+    /* Dark Sidebar variables */
+    --sidebar-background: 222 47% 11%; /* Dark Gray */
+    --sidebar-foreground: 0 0% 98%; /* White */
+    --sidebar-primary: 43 95% 65%; /* Lighter Yellow */
+    --sidebar-primary-foreground: 222 47% 11%; /* Dark Gray */
+    --sidebar-accent: 170 66% 60%; /* Lighter Teal */
+    --sidebar-accent-foreground: 222 47% 11%; /* Dark Gray */
     --sidebar-border: 222 47% 25%; /* Slightly Lighter Dark Border */
-    --sidebar-ring: 221 63% 45%; /* Lighter Deep Blue */
+    --sidebar-ring: 170 66% 60%; /* Lighter Teal */
   }
 }
 
@@ -114,4 +117,16 @@ body {
   .text-balance {
     text-wrap: balance;
   }
+  /* Custom shadow based on secondary color (Teal) */
+   .shadow-teal {
+      --tw-shadow-color: hsl(var(--secondary));
+      --tw-shadow: 0 4px 6px -1px var(--tw-shadow-color), 0 2px 4px -2px var(--tw-shadow-color);
+      --tw-shadow-colored: 0 4px 6px -1px var(--tw-shadow-color), 0 2px 4px -2px var(--tw-shadow-color);
+      box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
+   }
+    .hover\\:shadow-teal:hover {
+       --tw-shadow: 0 10px 15px -3px var(--tw-shadow-color), 0 4px 6px -4px var(--tw-shadow-color);
+       --tw-shadow-colored: 0 10px 15px -3px var(--tw-shadow-color), 0 4px 6px -4px var(--tw-shadow-color);
+       box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
+   }
 }
