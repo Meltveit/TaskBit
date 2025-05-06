@@ -30,7 +30,7 @@ import { Search } from 'lucide-react'; // Import Search icon
 const navItems = [
   { href: '/dashboard', icon: Home, label: 'Dashboard' },
   { href: '/projects', icon: Briefcase, label: 'Projects' },
-  // { href: '/time-tracking', icon: Clock, label: 'Time Tracking' }, // Uncomment when page exists
+  { href: '/time-tracking', icon: Clock, label: 'Time Tracking' }, // Uncommented Time Tracking
   { href: '/invoices', icon: FileText, label: 'Invoices' },
   // { href: '/clients', icon: Users, label: 'Clients' }, // Uncomment when page exists
 ];

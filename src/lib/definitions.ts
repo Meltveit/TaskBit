@@ -47,9 +47,24 @@ export type InvoiceItem = {
 export type ActivityLog = {
     id: string;
     timestamp: string; // ISO date string
-    type: 'project' | 'task' | 'invoice';
-    action: 'created' | 'updated' | 'deleted' | 'completed' | 'sent';
-    description: string; // e.g., "Created Invoice #INV-2024-003"
+    type: 'project' | 'task' | 'invoice' | 'time'; // Added 'time' type
+    action: 'created' | 'updated' | 'deleted' | 'completed' | 'sent' | 'started' | 'stopped'; // Added timer actions
+    description: string; // e.g., "Started timer for Task X"
+};
+
+// New type for Time Entry
+export type TimeEntry = {
+  id: string;
+  projectId: string;
+  projectName: string;
+  taskId?: string;
+  taskName?: string;
+  startTime: string; // ISO date string
+  endTime: string; // ISO date string
+  durationSeconds: number;
+  notes?: string;
+  createdAt: string; // ISO date string
+  updatedAt: string; // ISO date string
 };
 
 // --- Dummy Data Stores ---
@@ -142,10 +157,18 @@ let invoicesStore: Invoice[] = [
   },
 ];
 
+// Mock time entries store
+let timeEntriesStore: TimeEntry[] = [
+  { id: 'te1', projectId: '1', projectName: 'Website Redesign', taskId: 't2', taskName: 'About Us Page', startTime: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(), endTime: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(), durationSeconds: 7200, notes: 'Draft content', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'te2', projectId: '2', projectName: 'Mobile App Development', taskId: 't3', taskName: 'User Authentication', startTime: new Date(Date.now() - 28 * 60 * 60 * 1000).toISOString(), endTime: new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(), durationSeconds: 10800, notes: 'Setup Firebase Auth', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+];
+
+
 // Mock recent activity log
 let activityLogStore: ActivityLog[] = [
   { id: 'a1', timestamp: new Date(Date.now() - 5 * 60 * 1000).toISOString(), type: 'invoice', action: 'created', description: 'Created Invoice INV-2024-003' },
   { id: 'a2', timestamp: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(), type: 'task', action: 'completed', description: 'Completed Task: Create Ad Copy' },
+   { id: 'a6', timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), type: 'time', action: 'stopped', description: 'Stopped timer for: User Authentication (3h 0m)' }, // Added time entry log
   { id: 'a3', timestamp: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(), type: 'project', action: 'updated', description: 'Updated Project: Mobile App Development' },
   { id: 'a4', timestamp: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(), type: 'invoice', action: 'sent', description: 'Sent Invoice INV-2024-001' },
   { id: 'a5', timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), type: 'task', action: 'updated', description: 'Updated Task: About Us Page' },
@@ -296,13 +319,85 @@ export const deleteInvoice = async (id: string): Promise<boolean> => {
   return deleted;
 };
 
+
+// Time Tracking Functions (New)
+export const getTimeEntries = async (): Promise<TimeEntry[]> => {
+  // Add sorting by date descending
+  return [...timeEntriesStore].sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
+};
+
+export const createTimeEntry = async (entryData: Omit<TimeEntry, 'id' | 'createdAt' | 'updatedAt'>): Promise<TimeEntry> => {
+  const newEntry: TimeEntry = {
+    ...entryData,
+    id: `te${timeEntriesStore.length + 1}`,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  timeEntriesStore.push(newEntry);
+  // Format duration for log message
+   const durationHours = Math.floor(newEntry.durationSeconds / 3600);
+   const durationMinutes = Math.floor((newEntry.durationSeconds % 3600) / 60);
+   const durationFormatted = `${durationHours}h ${durationMinutes}m`;
+  addActivityLog({ type: 'time', action: 'stopped', description: `Logged time for ${newEntry.taskName || newEntry.projectName} (${durationFormatted})` });
+  return newEntry;
+};
+
+export const updateTimeEntry = async (id: string, entryData: Partial<Omit<TimeEntry, 'id' | 'createdAt' | 'updatedAt'>>): Promise<TimeEntry | undefined> => {
+  const entryIndex = timeEntriesStore.findIndex(entry => entry.id === id);
+  if (entryIndex === -1) return undefined;
+  timeEntriesStore[entryIndex] = { ...timeEntriesStore[entryIndex], ...entryData, updatedAt: new Date().toISOString() };
+   addActivityLog({ type: 'time', action: 'updated', description: `Updated time entry for ${timeEntriesStore[entryIndex].taskName || timeEntriesStore[entryIndex].projectName}` });
+  return timeEntriesStore[entryIndex];
+};
+
+export const deleteTimeEntry = async (id: string): Promise<boolean> => {
+  const entry = timeEntriesStore.find(e => e.id === id);
+  if (!entry) return false;
+  const initialLength = timeEntriesStore.length;
+  timeEntriesStore = timeEntriesStore.filter(entry => entry.id !== id);
+  const deleted = timeEntriesStore.length < initialLength;
+  if (deleted) {
+     addActivityLog({ type: 'time', action: 'deleted', description: `Deleted time entry for ${entry.taskName || entry.projectName}` });
+  }
+  return deleted;
+};
+
+// Get time report data (mock implementation)
+export const getTimeReport = async (filters: { fromDate?: string, toDate?: string, projectId?: string }): Promise<{ name: string, hours: number }[]> => {
+  console.log("Filtering report data with:", filters);
+  // In a real app, filter timeEntriesStore based on dates and projectId
+  // For now, just returning dummy data
+  let filteredData = [...dummyReportData]; // Use a copy
+  if (filters.projectId && filters.projectId !== 'all') {
+      const project = projectsStore.find(p => p.id === filters.projectId);
+      if (project) {
+         filteredData = dummyReportData.filter(d => d.name === project.name);
+      } else {
+         filteredData = []; // Project not found
+      }
+  }
+   // Date filtering would happen here in a real app
+  return Promise.resolve(filteredData);
+};
+
+
 // New data fetching functions for Dashboard
 
-// Get total weekly hours (mock implementation)
+// Get total weekly hours (mock implementation using time entries)
 export const getWeeklyHoursTracked = async (): Promise<number> => {
-    // In a real app, this would query time entries for the current week
-    // Mocking a value for now
-    return Promise.resolve(23.5);
+    const now = new Date();
+    const startOfWeek = new Date(now.setDate(now.getDate() - now.getDay())); // Assuming week starts on Sunday
+    startOfWeek.setHours(0, 0, 0, 0);
+    const endOfWeek = new Date(startOfWeek);
+    endOfWeek.setDate(startOfWeek.getDate() + 7);
+
+    const weeklyEntries = timeEntriesStore.filter(entry => {
+        const entryDate = new Date(entry.startTime);
+        return entryDate >= startOfWeek && entryDate < endOfWeek;
+    });
+
+    const totalSeconds = weeklyEntries.reduce((sum, entry) => sum + entry.durationSeconds, 0);
+    return Promise.resolve(totalSeconds / 3600); // Convert seconds to hours
 };
 
 // Get upcoming tasks (due within the next 7 days, limit 3)
@@ -313,10 +408,14 @@ export const getUpcomingTasks = async (limit: number = 3): Promise<Task[]> => {
 
     const upcoming = allTasks
         .filter(task => {
-            const dueDate = new Date(task.dueDate!);
+            if (!task.dueDate) return false; // Ensure dueDate exists
+            const dueDate = new Date(task.dueDate);
             return dueDate >= now && dueDate <= nextWeek;
         })
-        .sort((a, b) => new Date(a.dueDate!).getTime() - new Date(b.dueDate!).getTime()); // Sort by soonest due date
+        .sort((a, b) => {
+            if (!a.dueDate || !b.dueDate) return 0; // Handle undefined dueDates
+            return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime(); // Sort by soonest due date
+        });
 
     return upcoming.slice(0, limit);
 };

@@ -13,10 +13,14 @@ import {
   updateInvoice,
   deleteInvoice as deleteInvoiceData,
   getInvoiceById,
+  createTimeEntry, // Added
+  updateTimeEntry, // Added
+  deleteTimeEntry as deleteTimeEntryData, // Added
   type Project,
   type Task,
   type Invoice,
-  type InvoiceItem
+  type InvoiceItem,
+  type TimeEntry // Added
 } from "./definitions";
 import { sendEmail } from '@/services/email'; // Assuming this service exists
 
@@ -79,6 +83,7 @@ export async function updateTaskAction(projectId: string, taskId: string, data: 
     const updatedTask = await updateTask(projectId, taskId, data);
     if (!updatedTask) throw new Error("Task not found for update or update failed.");
     revalidatePath(`/projects/${projectId}`);
+    revalidatePath("/time-tracking"); // Also update time tracking if tasks are listed
     return updatedTask;
   } catch (error) {
     console.error("Failed to update task:", error);
@@ -92,6 +97,7 @@ export async function deleteTaskAction(projectId: string, taskId: string) {
     if (!success) throw new Error("Failed to delete task or task not found.");
     revalidatePath(`/projects/${projectId}`);
     revalidatePath("/dashboard");
+    revalidatePath("/time-tracking"); // Update time tracking
   } catch (error) {
     console.error("Failed to delete task:", error);
     throw new Error("Failed to delete task.");
@@ -184,5 +190,43 @@ export async function sendInvoiceEmailAction(invoiceId: string, clientEmail: str
     console.error("Failed to send invoice email:", error);
     const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
     return { success: false, message: `Failed to send invoice: ${errorMessage}` };
+  }
+}
+
+// Time Tracking Actions (New)
+export async function createTimeEntryAction(data: Omit<TimeEntry, 'id' | 'createdAt' | 'updatedAt'>) {
+  try {
+    const newEntry = await createTimeEntry(data);
+    revalidatePath("/time-tracking");
+    revalidatePath("/dashboard"); // If dashboard shows hours tracked
+    return newEntry;
+  } catch (error) {
+    console.error("Failed to create time entry:", error);
+    throw new Error("Failed to log time entry.");
+  }
+}
+
+export async function updateTimeEntryAction(id: string, data: Partial<Omit<TimeEntry, 'id' | 'createdAt' | 'updatedAt'>>) {
+  try {
+    const updatedEntry = await updateTimeEntry(id, data);
+    if (!updatedEntry) throw new Error("Time entry not found for update.");
+    revalidatePath("/time-tracking");
+    revalidatePath("/dashboard");
+    return updatedEntry;
+  } catch (error) {
+    console.error("Failed to update time entry:", error);
+    throw new Error("Failed to update time entry.");
+  }
+}
+
+export async function deleteTimeEntryAction(id: string) {
+  try {
+    const success = await deleteTimeEntryData(id);
+    if (!success) throw new Error("Failed to delete time entry or entry not found.");
+    revalidatePath("/time-tracking");
+    revalidatePath("/dashboard");
+  } catch (error) {
+    console.error("Failed to delete time entry:", error);
+    throw new Error("Failed to delete time entry.");
   }
 }
