@@ -102,30 +102,99 @@ export function InvoiceForm({ invoice, projects }: InvoiceFormProps) {
         id: (Math.random() + 1).toString(36).substring(7), // simple id for new items
         total: item.quantity * item.unitPrice
       })),
-      totalAmount: data.items.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0)
+      totalAmount: data.items.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0),
+      status: 'draft' // Always save as draft initially when creating/updating through form
     };
     
     try {
+      let savedInvoice: Invoice | undefined;
       if (isEditing && invoice) {
-        await updateInvoiceAction(invoice.id, payload);
+         savedInvoice = await updateInvoiceAction(invoice.id, payload);
         toast({ title: "Invoice Updated", description: "The invoice details have been successfully updated." });
       } else {
-        await createInvoiceAction(payload);
-        toast({ title: "Invoice Created", description: "The new invoice has been successfully created." });
+         savedInvoice = await createInvoiceAction(payload);
+        toast({ title: "Invoice Created", description: "The new invoice has been successfully created as a draft." });
       }
+
+      if (!savedInvoice) {
+         throw new Error("Failed to save invoice.");
+      }
+      
+      // Redirect or handle next step (like triggering send) based on which button was clicked maybe?
+      // For now, just redirect to the main invoices page after save/create.
       router.push("/invoices");
       router.refresh();
+
     } catch (error) {
       toast({
-        title: "Error",
-        description: `Failed to ${isEditing ? 'update' : 'create'} invoice. Please try again. Error: ${error instanceof Error ? error.message : String(error)}`,
+        title: "Error Saving Draft",
+        description: `Failed to ${isEditing ? 'update' : 'create'} draft invoice. Please try again. Error: ${error instanceof Error ? error.message : String(error)}`,
         variant: "destructive",
       });
     }
   }
 
+  // Handler for "Send Invoice" button
+   async function handleSend() {
+     const data = form.getValues();
+     const payload = {
+        ...data,
+        issueDate: data.issueDate.toISOString(),
+        dueDate: data.dueDate.toISOString(),
+        items: data.items.map(item => ({
+            ...item,
+            id: (Math.random() + 1).toString(36).substring(7),
+            total: item.quantity * item.unitPrice
+        })),
+        totalAmount: data.items.reduce((acc, item) => acc + (item.quantity * item.unitPrice), 0),
+        status: 'sent' as const // Set status to 'sent'
+     };
+
+     try {
+        let savedInvoice: Invoice | undefined;
+        if (isEditing && invoice) {
+            savedInvoice = await updateInvoiceAction(invoice.id, payload);
+        } else {
+            savedInvoice = await createInvoiceAction(payload);
+        }
+
+        if (!savedInvoice) {
+            throw new Error("Failed to save invoice before sending.");
+        }
+
+         // Now trigger the email sending action
+        const sendResult = await createInvoiceAction(payload); // Reuse create action which now also handles sending
+
+         if (!sendResult) { // Assuming createInvoiceAction returns the invoice or throws
+             throw new Error("Invoice created/updated, but failed to trigger send.");
+         }
+
+
+        toast({ title: "Invoice Sent", description: `Invoice ${savedInvoice.invoiceNumber} has been successfully created and sent.` });
+        router.push("/invoices");
+        router.refresh();
+     } catch (error) {
+        toast({
+            title: "Error Sending Invoice",
+            description: `Failed to send invoice. Please try again. Error: ${error instanceof Error ? error.message : String(error)}`,
+            variant: "destructive",
+        });
+     }
+   }
+
+
   return (
     <Form {...form}>
+      {/* Invoice Preview Card (optional real-time preview) */}
+      {/* This could be a separate component */}
+      <div className="mb-8 p-4 border rounded-lg bg-card shadow-sm">
+        <h3 className="text-lg font-semibold text-primary mb-2">Preview</h3>
+        <p className="text-muted-foreground">Client: {form.watch('clientName') || 'N/A'}</p>
+        <p className="text-muted-foreground">Total: <span className="font-bold text-teal-600">${totalAmount.toFixed(2)}</span></p>
+        {/* Add more preview details */}
+      </div>
+
+
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
         <div className="grid md:grid-cols-2 gap-6">
           <FormField
@@ -135,7 +204,19 @@ export function InvoiceForm({ invoice, projects }: InvoiceFormProps) {
               <FormItem>
                 <FormLabel>Client Name</FormLabel>
                 <FormControl>
-                  <Input placeholder="John Doe" {...field} />
+                  {/* Client Dropdown Placeholder - Replace with actual dropdown fetching clients */}
+                  <Input placeholder="Select or enter client name" {...field} />
+                   {/* <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a client..." />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                       <SelectItem value="client1">Acme Corp</SelectItem>
+                       <SelectItem value="client2">Beta Solutions</SelectItem>
+                    </SelectContent>
+                  </Select> */}
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -263,7 +344,7 @@ export function InvoiceForm({ invoice, projects }: InvoiceFormProps) {
         </div>
 
         <div>
-          <h3 className="text-lg font-medium mb-2">Invoice Items</h3>
+          <h3 className="text-lg font-medium mb-2">Line Items</h3>
           {fields.map((item, index) => (
             <div key={item.id} className="grid grid-cols-12 gap-2 items-end mb-4 p-3 border rounded-md bg-muted/30">
               <FormField
@@ -341,29 +422,8 @@ export function InvoiceForm({ invoice, projects }: InvoiceFormProps) {
             Total: ${totalAmount.toFixed(2)}
         </div>
 
-        <FormField
-          control={form.control}
-          name="status"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Status</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select invoice status" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="sent">Sent</SelectItem>
-                  <SelectItem value="paid">Paid</SelectItem>
-                  <SelectItem value="overdue">Overdue</SelectItem>
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+         {/* Hidden status field - managed internally */}
+        {/* <FormField control={form.control} name="status" render={() => <FormItem className="hidden"><FormControl><Input type="hidden" /></FormControl></FormItem>} /> */}
 
         <FormField
           control={form.control}
@@ -383,14 +443,20 @@ export function InvoiceForm({ invoice, projects }: InvoiceFormProps) {
           )}
         />
 
-        <Button type="submit" disabled={form.formState.isSubmitting}>
-          {form.formState.isSubmitting ? (isEditing ? "Saving..." : "Creating...") : (isEditing ? "Save Changes" : "Create Invoice")}
-        </Button>
-        {isEditing && (
-          <Button type="button" variant="outline" onClick={() => router.back()} className="ml-2">
-            Cancel
-          </Button>
-        )}
+        <div className="flex justify-end gap-2">
+            {/* Cancel Button (Red/Destructive) */}
+            <Button type="button" variant="destructive" onClick={() => router.back()}>
+                Cancel
+            </Button>
+             {/* Save Draft Button (Teal/Secondary) */}
+            <Button type="submit" variant="secondary" disabled={form.formState.isSubmitting}>
+                {form.formState.isSubmitting ? "Saving..." : "Save Draft"}
+            </Button>
+             {/* Send Button (Yellow/Accent) */}
+            <Button type="button" onClick={handleSend} disabled={form.formState.isSubmitting} className="bg-accent hover:bg-accent/90 text-accent-foreground">
+                 {form.formState.isSubmitting ? "Sending..." : "Send Invoice"}
+            </Button>
+        </div>
       </form>
     </Form>
   );

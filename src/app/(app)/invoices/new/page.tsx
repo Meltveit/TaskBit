@@ -8,7 +8,8 @@ export default async function NewInvoicePage() {
     <div className="max-w-3xl mx-auto">
       <Card className="shadow-lg">
         <CardHeader>
-          <CardTitle className="text-2xl">Create New Invoice</CardTitle>
+          {/* Adjusted title size to match main page */}
+          <CardTitle className="text-2xl font-bold text-primary">Create New Invoice</CardTitle>
           <CardDescription>Fill in the details below to generate an invoice.</CardDescription>
         </CardHeader>
         <CardContent>

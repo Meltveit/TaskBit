@@ -2,6 +2,7 @@ import { InvoiceForm } from '@/components/invoice-form';
 import { getInvoiceById, getProjects } from '@/lib/definitions';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { notFound } from 'next/navigation';
+import { AlertTriangle } from 'lucide-react'; // Import icon for warning
 
 export default async function EditInvoicePage({ params }: { params: { invoiceId: string } }) {
   const invoice = await getInvoiceById(params.invoiceId);
@@ -11,16 +12,21 @@ export default async function EditInvoicePage({ params }: { params: { invoiceId:
     notFound();
   }
   
+  // Check if the invoice is editable (only drafts)
   if (invoice.status !== 'draft') {
-    // Optionally, redirect or show a message that only draft invoices can be edited
     return (
         <div className="max-w-3xl mx-auto">
-            <Card className="shadow-lg">
+            <Card className="shadow-lg border-destructive/50"> {/* Add visual cue for error/warning */}
                 <CardHeader>
-                    <CardTitle className="text-2xl">Edit Invoice: {invoice.invoiceNumber}</CardTitle>
+                    {/* Adjusted title size */}
+                    <CardTitle className="text-2xl font-bold text-primary">Edit Invoice: {invoice.invoiceNumber}</CardTitle>
                 </CardHeader>
-                <CardContent>
-                    <p className="text-destructive">This invoice cannot be edited as it is not in 'draft' status.</p>
+                <CardContent className="flex flex-col items-center text-center space-y-4 py-8">
+                     <AlertTriangle className="w-12 h-12 text-destructive mb-4" />
+                     <p className="text-lg font-semibold text-destructive">Editing Locked</p>
+                    <p className="text-muted-foreground">
+                        This invoice cannot be edited because its status is '{invoice.status}'. Only invoices in 'draft' status can be modified.
+                    </p>
                 </CardContent>
             </Card>
         </div>
@@ -32,7 +38,8 @@ export default async function EditInvoicePage({ params }: { params: { invoiceId:
     <div className="max-w-3xl mx-auto">
       <Card className="shadow-lg">
         <CardHeader>
-          <CardTitle className="text-2xl">Edit Invoice: {invoice.invoiceNumber}</CardTitle>
+           {/* Adjusted title size */}
+          <CardTitle className="text-2xl font-bold text-primary">Edit Invoice: {invoice.invoiceNumber}</CardTitle>
           <CardDescription>Update the details for your invoice.</CardDescription>
         </CardHeader>
         <CardContent>

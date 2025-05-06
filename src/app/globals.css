@@ -34,7 +34,7 @@ body {
 
     --border: 215 28% 93%; /* Light Gray (#E5E7EB) for borders */
     --input: 215 28% 93%; /* Light Gray (#E5E7EB) for input backgrounds */
-    --ring: 221 63% 33%; /* Deep Blue for focus rings */
+    --ring: 170 66% 52%; /* Soft Teal (#2DD4BF) for focus rings - Updated */
 
     --radius: 0.5rem;
 
@@ -83,7 +83,7 @@ body {
 
     --border: 222 47% 30%; /* Muted Border */
     --input: 222 47% 20%; /* Dark Input Background */
-    --ring: 221 63% 45%; /* Lighter Deep Blue for rings */
+    --ring: 170 66% 60%; /* Lighter Soft Teal for rings - Updated */
 
     --chart-1: 221 63% 45%;
     --chart-2: 170 66% 60%;
