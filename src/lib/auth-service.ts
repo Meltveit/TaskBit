@@ -1,3 +1,4 @@
+// src/lib/auth-service.ts
 import { 
     createUserWithEmailAndPassword, 
     signInWithEmailAndPassword,
@@ -8,7 +9,7 @@ import {
     User,
     UserCredential
   } from 'firebase/auth';
-  import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
+  import { doc, setDoc, getDoc, serverTimestamp, collection } from 'firebase/firestore';
   import { auth, db } from './firebase';
   
   export interface AuthUser {
@@ -53,7 +54,7 @@ import {
         displayName: name
       });
       
-      // Create user document in Firestore
+      // Create user document in Firestore with proper structure
       await setDoc(doc(db, 'users', user.uid), {
         uid: user.uid,
         email: user.email,
@@ -63,6 +64,24 @@ import {
         plan: 'free', // Default plan
         stripeCustomerId: null
       });
+      
+      // Initialize empty collections for the user
+      const collectionsToInitialize = [
+        'projects',
+        'invoices',
+        'clients',
+        'activityLog'
+      ];
+      
+      // Create a metadata document in each collection to initialize it
+      const initPromises = collectionsToInitialize.map(collName => 
+        setDoc(doc(db, 'users', user.uid, collName, '_metadata'), {
+          initialized: true,
+          createdAt: serverTimestamp()
+        })
+      );
+      
+      await Promise.all(initPromises);
       
       return formatUser(user);
     } catch (error) {
@@ -105,6 +124,23 @@ import {
           plan: 'free', // Default plan
           stripeCustomerId: null
         });
+        
+        // Initialize collections for Google sign-in too
+        const collectionsToInitialize = [
+          'projects',
+          'invoices',
+          'clients',
+          'activityLog'
+        ];
+        
+        const initPromises = collectionsToInitialize.map(collName => 
+          setDoc(doc(db, 'users', user.uid, collName, '_metadata'), {
+            initialized: true,
+            createdAt: serverTimestamp()
+          })
+        );
+        
+        await Promise.all(initPromises);
       }
       
       return formatUser(user);

@@ -13,7 +13,9 @@ import {
     limit,
     Timestamp,
     DocumentReference,
-    DocumentData
+    DocumentData,
+    documentId,
+    collectionGroup
   } from 'firebase/firestore';
   import { db } from './firebase';
   import { auth } from './firebase';
@@ -29,7 +31,8 @@ import {
     updatedAt: string; // ISO date string
     tasks: Task[];
     status: 'active' | 'completed' | 'archived';
-    clientId?: string; // Link to client
+    clientId?: string; // Added clientId to link projects to clients
+    lastActivity?: string; // ISO date string
   }
   
   export interface Task {
@@ -41,6 +44,8 @@ import {
     createdAt: string; // ISO date string
     updatedAt: string; // ISO date string
     dueDate?: string; // ISO date string
+    // Add requiresApproval flag if needed for client portal logic
+    // requiresApproval?: boolean;
   }
   
   export interface Invoice {
@@ -49,7 +54,7 @@ import {
     projectId?: string; // Optional: invoice might not be tied to a project
     clientName: string;
     clientEmail: string;
-    clientId?: string; // Link to client
+    clientId?: string; // Added clientId to link invoices to clients
     invoiceNumber: string;
     issueDate: string; // ISO date string
     dueDate: string; // ISO date string
@@ -90,9 +95,9 @@ import {
     id: string;
     uid: string; // Owner user ID
     timestamp: string; // ISO date string
-    type: 'project' | 'task' | 'invoice' | 'time';
-    action: 'created' | 'updated' | 'deleted' | 'completed' | 'sent' | 'started' | 'stopped' | 'approved';
-    description: string;
+    type: 'project' | 'task' | 'invoice' | 'time' | 'client' | 'system';
+    action: 'created' | 'updated' | 'deleted' | 'completed' | 'sent' | 'started' | 'stopped' | 'approved' | 'migration';
+    description: string; // e.g., "Started timer for Task X"
   }
   
   export interface Client {
@@ -106,7 +111,7 @@ import {
     updatedAt: string;
   }
   
-  // Helper functions
+  // --- Helper functions ---
   
   // Convert Firestore timestamp to ISO string
   const timestampToISO = (timestamp: Timestamp): string => {
@@ -136,7 +141,7 @@ import {
     return user.uid;
   };
   
-  // PROJECTS
+  // --- PROJECTS ---
   
   export const getProjects = async (): Promise<Project[]> => {
     try {
@@ -147,7 +152,10 @@ import {
       
       const projects: Project[] = [];
       
-      for (const projectDoc of projectsSnapshot.docs) {
+      // Skip metadata document
+      const validProjects = projectsSnapshot.docs.filter(doc => doc.id !== '_metadata');
+      
+      for (const projectDoc of validProjects) {
         const projectData = projectDoc.data();
         const projectId = projectDoc.id;
         
@@ -210,6 +218,7 @@ import {
         uid,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
+        lastActivity: serverTimestamp(),
       });
       
       // Log activity
@@ -280,6 +289,17 @@ import {
       
       await Promise.all(deleteTasks);
       
+      // Delete all time entries in the project
+      const timeEntriesCollection = collection(db, 'users', uid, 'projects', projectId, 'timeEntries');
+      const timeEntriesSnapshot = await getDocs(timeEntriesCollection);
+      
+      // Delete all time entries in a batch
+      const deleteTimeEntries = timeEntriesSnapshot.docs.map(entryDoc => 
+        deleteDoc(doc(db, 'users', uid, 'projects', projectId, 'timeEntries', entryDoc.id))
+      );
+      
+      await Promise.all(deleteTimeEntries);
+      
       // Delete the project
       await deleteDoc(projectRef);
       
@@ -297,7 +317,7 @@ import {
     }
   };
   
-  // TASKS
+  // --- TASKS ---
   
   export const getTasksByProjectId = async (projectId: string): Promise<Task[]> => {
     try {
@@ -336,9 +356,10 @@ import {
         updatedAt: serverTimestamp(),
       });
       
-      // Update project's updatedAt
+      // Update project's updatedAt and lastActivity
       await updateDoc(projectRef, {
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
+        lastActivity: serverTimestamp()
       });
       
       // Log activity
@@ -378,9 +399,10 @@ import {
         updatedAt: serverTimestamp()
       });
       
-      // Update project's updatedAt
+      // Update project's updatedAt and lastActivity
       await updateDoc(doc(db, 'users', uid, 'projects', projectId), {
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
+        lastActivity: serverTimestamp()
       });
       
       // Log activity based on what changed
@@ -434,9 +456,10 @@ import {
       // Delete the task
       await deleteDoc(taskRef);
       
-      // Update project's updatedAt
+      // Update project's updatedAt and lastActivity
       await updateDoc(doc(db, 'users', uid, 'projects', projectId), {
-        updatedAt: serverTimestamp()
+        updatedAt: serverTimestamp(),
+        lastActivity: serverTimestamp()
       });
       
       // Log activity
@@ -453,7 +476,7 @@ import {
     }
   };
   
-  // INVOICES
+  // --- INVOICES ---
   
   export const getInvoices = async (): Promise<Invoice[]> => {
     try {
@@ -462,7 +485,10 @@ import {
       const invoicesQuery = query(invoicesCollection, orderBy('createdAt', 'desc'));
       const invoicesSnapshot = await getDocs(invoicesQuery);
       
-      return invoicesSnapshot.docs.map(invoiceDoc => 
+      // Skip metadata document
+      const validInvoices = invoicesSnapshot.docs.filter(doc => doc.id !== '_metadata');
+      
+      return validInvoices.map(invoiceDoc => 
         convertFirestoreData<Invoice>(invoiceDoc.data(), invoiceDoc.id)
       );
     } catch (error) {
@@ -539,6 +565,13 @@ import {
         description: `Created Invoice: ${invoiceNumber}`
       });
       
+      // If this invoice is associated with a project, update project's lastActivity
+      if (invoiceData.projectId) {
+        await updateDoc(doc(db, 'users', uid, 'projects', invoiceData.projectId), {
+          lastActivity: serverTimestamp()
+        });
+      }
+      
       // Get the new invoice
       const newInvoiceSnapshot = await getDoc(newInvoiceRef);
       return convertFirestoreData<Invoice>(newInvoiceSnapshot.data()!, newInvoiceRef.id);
@@ -584,6 +617,13 @@ import {
         });
       }
       
+      // If this invoice is associated with a project, update project's lastActivity
+      if (originalInvoice.projectId) {
+        await updateDoc(doc(db, 'users', uid, 'projects', originalInvoice.projectId), {
+          lastActivity: serverTimestamp()
+        });
+      }
+      
       // Get the updated invoice
       const updatedInvoiceSnapshot = await getDoc(invoiceRef);
       return convertFirestoreData<Invoice>(updatedInvoiceSnapshot.data(), invoiceId);
@@ -604,7 +644,8 @@ import {
         return false;
       }
       
-      const invoiceNumber = invoiceSnapshot.data().invoiceNumber;
+      const invoiceData = invoiceSnapshot.data();
+      const invoiceNumber = invoiceData.invoiceNumber;
       
       // Delete the invoice
       await deleteDoc(invoiceRef);
@@ -616,6 +657,13 @@ import {
         description: `Deleted Invoice: ${invoiceNumber}`
       });
       
+      // If this invoice is associated with a project, update project's lastActivity
+      if (invoiceData.projectId) {
+        await updateDoc(doc(db, 'users', uid, 'projects', invoiceData.projectId), {
+          lastActivity: serverTimestamp()
+        });
+      }
+      
       return true;
     } catch (error) {
       console.error('Error deleting invoice:', error);
@@ -623,17 +671,55 @@ import {
     }
   };
   
-  // TIME ENTRIES
+  // --- TIME ENTRIES ---
   
-  export const getTimeEntries = async (): Promise<TimeEntry[]> => {
+  // Get time entries for a specific project
+  export const getTimeEntriesForProject = async (projectId: string): Promise<TimeEntry[]> => {
     try {
       const uid = getCurrentUserId();
-      const entriesCollection = collection(db, 'users', uid, 'timeEntries');
+      const entriesCollection = collection(db, 'users', uid, 'projects', projectId, 'timeEntries');
       const entriesQuery = query(entriesCollection, orderBy('startTime', 'desc'));
       const entriesSnapshot = await getDocs(entriesQuery);
       
-      return entriesSnapshot.docs.map(entryDoc => 
-        convertFirestoreData<TimeEntry>(entryDoc.data(), entryDoc.id)
+      return entriesSnapshot.docs.map(entryDoc => {
+        const entry = convertFirestoreData<TimeEntry>(entryDoc.data(), entryDoc.id);
+        // Ensure projectId is included
+        entry.projectId = projectId;
+        return entry;
+      });
+    } catch (error) {
+      console.error('Error getting time entries for project:', error);
+      throw error;
+    }
+  };
+  
+  // Get all time entries across all projects
+  export const getTimeEntries = async (): Promise<TimeEntry[]> => {
+    try {
+      const uid = getCurrentUserId();
+      const projectsCollection = collection(db, 'users', uid, 'projects');
+      const projectsSnapshot = await getDocs(projectsCollection);
+      
+      // Skip metadata document
+      const validProjects = projectsSnapshot.docs.filter(doc => doc.id !== '_metadata');
+      
+      const timeEntriesPromises = validProjects.map(async projectDoc => {
+        const projectId = projectDoc.id;
+        const entriesCollection = collection(db, 'users', uid, 'projects', projectId, 'timeEntries');
+        const entriesSnapshot = await getDocs(entriesCollection);
+        
+        return entriesSnapshot.docs.map(entryDoc => {
+          const entry = convertFirestoreData<TimeEntry>(entryDoc.data(), entryDoc.id);
+          // Ensure projectId is included
+          entry.projectId = projectId;
+          return entry;
+        });
+      });
+      
+      const allTimeEntries = await Promise.all(timeEntriesPromises);
+      // Flatten the array of arrays and sort by start time
+      return allTimeEntries.flat().sort((a, b) => 
+        new Date(b.startTime).getTime() - new Date(a.startTime).getTime()
       );
     } catch (error) {
       console.error('Error getting time entries:', error);
@@ -641,11 +727,18 @@ import {
     }
   };
   
+  // Create a time entry for a project
   export const createTimeEntry = async (entryData: Omit<TimeEntry, 'id' | 'createdAt' | 'updatedAt' | 'uid'>): Promise<TimeEntry> => {
     try {
       const uid = getCurrentUserId();
+      const { projectId } = entryData;
       
-      const entriesCollection = collection(db, 'users', uid, 'timeEntries');
+      if (!projectId) {
+        throw new Error('Project ID is required for time entries');
+      }
+      
+      // Store time entry as subcollection of project
+      const entriesCollection = collection(db, 'users', uid, 'projects', projectId, 'timeEntries');
       const newEntryRef = await addDoc(entriesCollection, {
         ...entryData,
         uid,
@@ -665,19 +758,29 @@ import {
         description: `Logged time for ${entryData.taskName || entryData.projectName} (${durationFormatted})`
       });
       
+      // Update last activity timestamp on the project
+      await updateDoc(doc(db, 'users', uid, 'projects', projectId), {
+        lastActivity: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      
       // Get the new time entry
       const newEntrySnapshot = await getDoc(newEntryRef);
-      return convertFirestoreData<TimeEntry>(newEntrySnapshot.data()!, newEntryRef.id);
+      const newEntry = convertFirestoreData<TimeEntry>(newEntrySnapshot.data()!, newEntryRef.id);
+      // Ensure projectId is included
+      newEntry.projectId = projectId;
+      return newEntry;
     } catch (error) {
       console.error('Error creating time entry:', error);
       throw error;
     }
   };
   
-  export const updateTimeEntry = async (entryId: string, entryData: Partial<Omit<TimeEntry, 'id' | 'createdAt' | 'updatedAt'>>): Promise<TimeEntry | undefined> => {
+  // Update a time entry
+  export const updateTimeEntry = async (projectId: string, entryId: string, entryData: Partial<Omit<TimeEntry, 'id' | 'createdAt' | 'updatedAt'>>): Promise<TimeEntry | undefined> => {
     try {
       const uid = getCurrentUserId();
-      const entryRef = doc(db, 'users', uid, 'timeEntries', entryId);
+      const entryRef = doc(db, 'users', uid, 'projects', projectId, 'timeEntries', entryId);
       
       // Check if entry exists
       const entrySnapshot = await getDoc(entryRef);
@@ -700,19 +803,29 @@ import {
         description: `Updated time entry for ${originalEntry.taskName || originalEntry.projectName}`
       });
       
+      // Update last activity timestamp on the project
+      await updateDoc(doc(db, 'users', uid, 'projects', projectId), {
+        lastActivity: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      
       // Get the updated time entry
       const updatedEntrySnapshot = await getDoc(entryRef);
-      return convertFirestoreData<TimeEntry>(updatedEntrySnapshot.data(), entryId);
+      const updatedEntry = convertFirestoreData<TimeEntry>(updatedEntrySnapshot.data(), entryId);
+      // Ensure projectId is included
+      updatedEntry.projectId = projectId;
+      return updatedEntry;
     } catch (error) {
       console.error('Error updating time entry:', error);
       throw error;
     }
   };
   
-  export const deleteTimeEntry = async (entryId: string): Promise<boolean> => {
+  // Delete a time entry
+  export const deleteTimeEntry = async (projectId: string, entryId: string): Promise<boolean> => {
     try {
       const uid = getCurrentUserId();
-      const entryRef = doc(db, 'users', uid, 'timeEntries', entryId);
+      const entryRef = doc(db, 'users', uid, 'projects', projectId, 'timeEntries', entryId);
       
       // Get entry details for activity log
       const entrySnapshot = await getDoc(entryRef);
@@ -733,6 +846,12 @@ import {
         description: `Deleted time entry: ${entryName}`
       });
       
+      // Update last activity timestamp on the project
+      await updateDoc(doc(db, 'users', uid, 'projects', projectId), {
+        lastActivity: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      });
+      
       return true;
     } catch (error) {
       console.error('Error deleting time entry:', error);
@@ -740,7 +859,7 @@ import {
     }
   };
   
-  // ACTIVITY LOG
+  // --- ACTIVITY LOG ---
   
   export const getRecentActivity = async (limit: number = 5): Promise<ActivityLog[]> => {
     try {
@@ -783,62 +902,7 @@ import {
     }
   };
   
-  // CLIENTS
-  
-  export const getClients = async (): Promise<Client[]> => {
-    try {
-      const uid = getCurrentUserId();
-      const clientsCollection = collection(db, 'users', uid, 'clients');
-      const clientsQuery = query(clientsCollection, orderBy('name', 'asc'));
-      const clientsSnapshot = await getDocs(clientsQuery);
-      
-      return clientsSnapshot.docs.map(clientDoc => 
-        convertFirestoreData<Client>(clientDoc.data(), clientDoc.id)
-      );
-    } catch (error) {
-      console.error('Error getting clients:', error);
-      throw error;
-    }
-  };
-  
-  export const getClientById = async (clientId: string): Promise<Client | undefined> => {
-    try {
-      const uid = getCurrentUserId();
-      const clientDoc = await getDoc(doc(db, 'users', uid, 'clients', clientId));
-      
-      if (!clientDoc.exists()) {
-        return undefined;
-      }
-      
-      return convertFirestoreData<Client>(clientDoc.data(), clientId);
-    } catch (error) {
-      console.error('Error getting client:', error);
-      throw error;
-    }
-  };
-  
-  export const createClient = async (clientData: Omit<Client, 'id' | 'createdAt' | 'updatedAt' | 'uid'>): Promise<Client> => {
-    try {
-      const uid = getCurrentUserId();
-      
-      const clientsCollection = collection(db, 'users', uid, 'clients');
-      const newClientRef = await addDoc(clientsCollection, {
-        ...clientData,
-        uid,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-      
-      // Get the new client
-      const newClientSnapshot = await getDoc(newClientRef);
-      return convertFirestoreData<Client>(newClientSnapshot.data()!, newClientRef.id);
-    } catch (error) {
-      console.error('Error creating client:', error);
-      throw error;
-    }
-  };
-  
-  // CLIENT PORTAL SPECIFIC
+  // --- CLIENT PORTAL SPECIFIC ---
   
   export const getProjectsForClient = async (clientId: string): Promise<Project[]> => {
     try {
@@ -914,12 +978,11 @@ import {
     }
   };
   
-  // DASHBOARD HELPER FUNCTIONS
+  // --- DASHBOARD HELPER FUNCTIONS ---
   
   export const getWeeklyHoursTracked = async (): Promise<number> => {
     try {
       const uid = getCurrentUserId();
-      const entriesCollection = collection(db, 'users', uid, 'timeEntries');
       
       // Calculate start of week (Sunday)
       const now = new Date();
@@ -931,20 +994,34 @@ import {
       const endOfWeek = new Date(startOfWeek);
       endOfWeek.setDate(startOfWeek.getDate() + 7);
       
-      // Query time entries for this week
-      const entriesQuery = query(
-        entriesCollection,
-        where('startTime', '>=', startOfWeek.toISOString()),
-        where('startTime', '<', endOfWeek.toISOString())
-      );
+      // Get all projects to search for time entries
+      const projectsCollection = collection(db, 'users', uid, 'projects');
+      const projectsSnapshot = await getDocs(projectsCollection);
       
-      const entriesSnapshot = await getDocs(entriesQuery);
+      // Skip metadata document
+      const validProjects = projectsSnapshot.docs.filter(doc => doc.id !== '_metadata');
       
-      // Calculate total hours
-      const totalSeconds = entriesSnapshot.docs.reduce(
-        (sum, doc) => sum + doc.data().durationSeconds, 
-        0
-      );
+      let totalSeconds = 0;
+      
+      // For each project, get time entries within this week
+      for (const projectDoc of validProjects) {
+        const projectId = projectDoc.id;
+        const entriesCollection = collection(db, 'users', uid, 'projects', projectId, 'timeEntries');
+        
+        // Query time entries for this week
+        const entriesQuery = query(
+          entriesCollection,
+          where('startTime', '>=', startOfWeek.toISOString()),
+          where('startTime', '<', endOfWeek.toISOString())
+        );
+        
+        const entriesSnapshot = await getDocs(entriesQuery);
+        
+        // Calculate total hours for this project this week
+        entriesSnapshot.docs.forEach(doc => {
+          totalSeconds += doc.data().durationSeconds || 0;
+        });
+      }
       
       return totalSeconds / 3600; // Convert seconds to hours
     } catch (error) {
@@ -985,44 +1062,55 @@ import {
     }
   };
   
-  // REPORT DATA (TIME TRACKING)
+  // --- REPORT DATA (TIME TRACKING) ---
   
   export const getTimeReport = async (filters: { fromDate?: string, toDate?: string, projectId?: string }): Promise<{ name: string, hours: number }[]> => {
     try {
       const uid = getCurrentUserId();
-      const entriesCollection = collection(db, 'users', uid, 'timeEntries');
       
-      // Build query based on filters
-      let entriesQuery = query(entriesCollection);
+      // Get all projects or a specific project
+      const projectsCollection = collection(db, 'users', uid, 'projects');
+      const projectsQuery = filters.projectId 
+        ? query(projectsCollection, where(documentId(), '==', filters.projectId))
+        : query(projectsCollection);
       
-      if (filters.fromDate) {
-        entriesQuery = query(entriesQuery, where('startTime', '>=', filters.fromDate));
-      }
+      const projectsSnapshot = await getDocs(projectsQuery);
       
-      if (filters.toDate) {
-        entriesQuery = query(entriesQuery, where('startTime', '<=', filters.toDate));
-      }
-      
-      if (filters.projectId) {
-        entriesQuery = query(entriesQuery, where('projectId', '==', filters.projectId));
-      }
-      
-      const entriesSnapshot = await getDocs(entriesQuery);
+      // Skip metadata document and filter out invalid projects
+      const validProjects = projectsSnapshot.docs.filter(doc => doc.id !== '_metadata');
       
       // Group by project and calculate hours
       const projectHours: Record<string, number> = {};
       
-      entriesSnapshot.docs.forEach(doc => {
-        const data = doc.data();
-        const projectName = data.projectName;
-        const hours = data.durationSeconds / 3600;
+      for (const projectDoc of validProjects) {
+        const projectId = projectDoc.id;
+        const projectName = projectDoc.data().name || `Project ${projectId}`;
         
-        if (!projectHours[projectName]) {
-          projectHours[projectName] = 0;
+        // Query time entries for this project
+        const entriesCollection = collection(db, 'users', uid, 'projects', projectId, 'timeEntries');
+        let entriesQuery = query(entriesCollection);
+        
+        // Apply date filters if provided
+        if (filters.fromDate) {
+          entriesQuery = query(entriesQuery, where('startTime', '>=', filters.fromDate));
         }
         
-        projectHours[projectName] += hours;
-      });
+        if (filters.toDate) {
+          entriesQuery = query(entriesQuery, where('startTime', '<=', filters.toDate));
+        }
+        
+        const entriesSnapshot = await getDocs(entriesQuery);
+        
+        // Calculate total hours for this project
+        const projectTotalHours = entriesSnapshot.docs.reduce((total, doc) => {
+          const data = doc.data();
+          return total + (data.durationSeconds / 3600); // Convert seconds to hours
+        }, 0);
+        
+        if (projectTotalHours > 0) {
+          projectHours[projectName] = projectTotalHours;
+        }
+      }
       
       // Convert to array format for charts
       return Object.entries(projectHours).map(([name, hours]) => ({
@@ -1032,5 +1120,100 @@ import {
     } catch (error) {
       console.error('Error generating time report:', error);
       throw error;
+    }
+  };
+  
+  // Migration function for legacy data
+  export const migrateTimeEntriesToProjects = async (): Promise<{ success: boolean, migratedCount: number }> => {
+    try {
+      const uid = getCurrentUserId();
+      
+      // Check if there's a legacy timeEntries collection
+      const legacyCollection = collection(db, 'users', uid, 'timeEntries');
+      const legacyQuery = query(legacyCollection);
+      const legacySnapshot = await getDocs(legacyQuery);
+      
+      if (legacySnapshot.empty) {
+        console.log('No legacy time entries found, nothing to migrate');
+        return { success: true, migratedCount: 0 };
+      }
+      
+      console.log(`Found ${legacySnapshot.size} legacy time entries to migrate`);
+      
+      // Create a migration log
+      const migrationLogRef = doc(db, 'users', uid, 'activityLog', `migration-${Date.now()}`);
+      await setDoc(migrationLogRef, {
+        type: 'system',
+        action: 'migration',
+        description: `Migrating ${legacySnapshot.size} time entries to project subcollections`,
+        timestamp: serverTimestamp(),
+        uid
+      });
+      
+      // Migrate each entry to its project's timeEntries subcollection
+      const migrationPromises = legacySnapshot.docs.map(async (entryDoc) => {
+        const entryData = entryDoc.data() as TimeEntry;
+        const entryId = entryDoc.id;
+        const projectId = entryData.projectId;
+        
+        if (!projectId) {
+          console.warn(`Time entry ${entryId} has no projectId, skipping migration`);
+          return false;
+        }
+        
+        // Create a new time entry in the project's timeEntries subcollection
+        try {
+          await setDoc(
+            doc(db, 'users', uid, 'projects', projectId, 'timeEntries', entryId),
+            {
+              ...entryData,
+              migratedAt: serverTimestamp()
+            }
+          );
+          
+          // Delete the old entry
+          await deleteDoc(doc(db, 'users', uid, 'timeEntries', entryId));
+          
+          return true;
+        } catch (error) {
+          console.error(`Error migrating time entry ${entryId}:`, error);
+          return false;
+        }
+      });
+      
+      const migrationResults = await Promise.all(migrationPromises);
+      const migratedCount = migrationResults.filter(Boolean).length;
+      
+      // Update migration log with results
+      await setDoc(migrationLogRef, {
+        migrationCompleted: true,
+        migratedCount,
+        skippedCount: legacySnapshot.size - migratedCount,
+        completedAt: serverTimestamp()
+      }, { merge: true });
+      
+      console.log(`Migration completed: migrated ${migratedCount} of ${legacySnapshot.size} time entries`);
+      
+      return { success: true, migratedCount };
+    } catch (error) {
+      console.error('Error migrating time entries:', error);
+      throw error;
+    }
+  };
+  
+  // Check if migration is needed
+  export const checkMigrationNeeded = async (): Promise<boolean> => {
+    try {
+      const uid = getCurrentUserId();
+      
+      // Check if there's a legacy timeEntries collection with any documents
+      const legacyCollection = collection(db, 'users', uid, 'timeEntries');
+      const legacyQuery = query(legacyCollection);
+      const legacySnapshot = await getDocs(legacyQuery);
+      
+      return !legacySnapshot.empty;
+    } catch (error) {
+      console.error('Error checking migration status:', error);
+      return false;
     }
   };

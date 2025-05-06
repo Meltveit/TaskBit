@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '@/lib/firebase';
 import { 
   signInWithEmail, 
@@ -13,6 +13,7 @@ import {
   type SignInData
 } from '@/lib/auth-service';
 import { getUserSubscription } from '@/lib/stripe-service';
+import { checkMigrationNeeded, migrateTimeEntriesToProjects } from '@/lib/db-models';
 
 interface AuthContextType {
   user: User | null;
@@ -58,11 +59,55 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           // Get user data from Firestore
           const userDoc = await getDoc(doc(db, 'users', user.uid));
-          if (userDoc.exists()) {
-            setUserData({
+          
+          // If user document doesn't exist, create it (might happen with external auth)
+          if (!userDoc.exists()) {
+            // Create user document with basic structure
+            await setDoc(doc(db, 'users', user.uid), {
               uid: user.uid,
               email: user.email,
               displayName: user.displayName,
+              photoURL: user.photoURL,
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+              plan: 'free', // Default plan
+              stripeCustomerId: null
+            });
+            
+            // Initialize collections for the user
+            const collectionsToInitialize = [
+              'projects',
+              'invoices',
+              'clients',
+              'activityLog'
+            ];
+            
+            const initPromises = collectionsToInitialize.map(collName => 
+              setDoc(doc(db, 'users', user.uid, collName, '_metadata'), {
+                initialized: true,
+                createdAt: serverTimestamp()
+              })
+            );
+            
+            await Promise.all(initPromises);
+            
+            // Get the newly created user document
+            const newUserDoc = await getDoc(doc(db, 'users', user.uid));
+            if (newUserDoc.exists()) {
+              setUserData({
+                uid: user.uid,
+                email: user.email,
+                displayName: user.displayName,
+                plan: 'free',
+                stripeCustomerId: null,
+              });
+            }
+          } else {
+            // User document exists, get the data
+            setUserData({
+              uid: user.uid,
+              email: user.email,
+              displayName: user.displayName || userDoc.data().displayName,
               plan: userDoc.data().plan || 'free',
               stripeCustomerId: userDoc.data().stripeCustomerId,
             });
@@ -71,6 +116,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Get subscription data
           const sub = await getUserSubscription();
           setSubscription(sub);
+          
+          // Check if migration is needed
+          const migrationNeeded = await checkMigrationNeeded();
+          if (migrationNeeded) {
+            console.log('Migration needed, running migration...');
+            try {
+              // Create a migration activity log
+              const activityLogCollection = collection(db, 'users', user.uid, 'activityLog');
+              await setDoc(doc(activityLogCollection, `migration-start-${Date.now()}`), {
+                type: 'system',
+                action: 'migration',
+                description: `Starting migration of time entries to project subcollections`,
+                timestamp: serverTimestamp(),
+                uid: user.uid
+              });
+              
+              // Run migration
+              const { success, migratedCount } = await migrateTimeEntriesToProjects();
+              
+              // Log migration result
+              await setDoc(doc(activityLogCollection, `migration-complete-${Date.now()}`), {
+                type: 'system',
+                action: 'migration',
+                description: `Completed migration of ${migratedCount} time entries to project subcollections`,
+                timestamp: serverTimestamp(),
+                uid: user.uid,
+                success,
+                migratedCount
+              });
+              
+              console.log(`Migration ${success ? 'completed' : 'failed'}: migrated ${migratedCount} time entries`);
+            } catch (migrationError) {
+              console.error('Error running migration:', migrationError);
+            }
+          }
         } catch (error) {
           console.error('Error fetching user data:', error);
         }
