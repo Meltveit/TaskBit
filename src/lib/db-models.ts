@@ -19,7 +19,6 @@ import {
   } from 'firebase/firestore';
   import { db } from './firebase';
   import { auth } from './firebase';
-  import { v4 as uuidv4 } from 'uuid';
   
   // Define types
   export interface Project {
@@ -44,8 +43,6 @@ import {
     createdAt: string; // ISO date string
     updatedAt: string; // ISO date string
     dueDate?: string; // ISO date string
-    // Add requiresApproval flag if needed for client portal logic
-    // requiresApproval?: boolean;
   }
   
   export interface Invoice {
@@ -210,7 +207,6 @@ import {
   export const createProject = async (projectData: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'tasks' | 'uid'>): Promise<Project> => {
     try {
       const uid = getCurrentUserId();
-      const now = new Date().toISOString();
       
       const projectsCollection = collection(db, 'users', uid, 'projects');
       const newProjectRef = await addDoc(projectsCollection, {
@@ -1123,6 +1119,28 @@ import {
     }
   };
   
+  // Check if migration is needed
+  export const checkMigrationNeeded = async (): Promise<boolean> => {
+    try {
+      const user = auth.currentUser;
+      if (!user) {
+        return false;
+      }
+      
+      const uid = user.uid;
+      
+      // Check if there's a legacy timeEntries collection with any documents
+      const legacyCollection = collection(db, 'users', uid, 'timeEntries');
+      const legacyQuery = query(legacyCollection, where('projectId', '!=', null));
+      const legacySnapshot = await getDocs(legacyQuery);
+      
+      return !legacySnapshot.empty;
+    } catch (error) {
+      console.error('Error checking migration status:', error);
+      return false;
+    }
+  };
+  
   // Migration function for legacy data
   export const migrateTimeEntriesToProjects = async (): Promise<{ success: boolean, migratedCount: number }> => {
     try {
@@ -1198,22 +1216,5 @@ import {
     } catch (error) {
       console.error('Error migrating time entries:', error);
       throw error;
-    }
-  };
-  
-  // Check if migration is needed
-  export const checkMigrationNeeded = async (): Promise<boolean> => {
-    try {
-      const uid = getCurrentUserId();
-      
-      // Check if there's a legacy timeEntries collection with any documents
-      const legacyCollection = collection(db, 'users', uid, 'timeEntries');
-      const legacyQuery = query(legacyCollection);
-      const legacySnapshot = await getDocs(legacyQuery);
-      
-      return !legacySnapshot.empty;
-    } catch (error) {
-      console.error('Error checking migration status:', error);
-      return false;
     }
   };

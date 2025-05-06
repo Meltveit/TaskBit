@@ -24,14 +24,13 @@ import {
   type InvoiceItem,
   type TimeEntry,
   getProjects
-} from "./definitions";
+} from "./db-models"; // Updated from definitions
 import { sendEmail } from '@/services/email';
 
 // Project Actions
-export async function createProjectAction(data: Omit<Project, "id" | "createdAt" | "updatedAt" | "tasks">) {
+export async function createProjectAction(data: Omit<Project, "id" | "createdAt" | "updatedAt" | "tasks" | "uid">) {
   try {
     const newProject = await createProject(data);
-    addActivityLog({ type: 'project', action: 'created', description: `Created Project: ${newProject.name}` });
     revalidatePath("/projects");
     revalidatePath("/dashboard");
     return newProject;
@@ -41,11 +40,10 @@ export async function createProjectAction(data: Omit<Project, "id" | "createdAt"
   }
 }
 
-export async function updateProjectAction(id: string, data: Partial<Omit<Project, "id" | "createdAt" | "updatedAt">>) {
+export async function updateProjectAction(id: string, data: Partial<Omit<Project, "id" | "createdAt" | "updatedAt" | "uid">>) {
   try {
     const updatedProject = await updateProject(id, data);
     if (!updatedProject) throw new Error("Project not found for update.");
-    addActivityLog({ type: 'project', action: 'updated', description: `Updated Project: ${updatedProject.name}` });
     revalidatePath("/projects");
     revalidatePath(`/projects/${id}`);
     revalidatePath("/dashboard");
@@ -60,12 +58,10 @@ export async function deleteProjectAction(id: string) {
   try {
     // Fetch project name before deleting for logging
     const project = await getProjectById(id);
-    const projectName = project ? project.name : `Project ID ${id}`;
-
+    
     const success = await deleteProjectData(id);
     if (!success) throw new Error("Failed to delete project or project not found.");
 
-    addActivityLog({ type: 'project', action: 'deleted', description: `Deleted Project: ${projectName}` });
     revalidatePath("/projects");
     revalidatePath("/dashboard");
     // Invoices linked to this project might need handling logic if strict relations are enforced
@@ -81,10 +77,6 @@ export async function createTaskAction(projectId: string, data: Omit<Task, "id" 
     const newTask = await createTask(projectId, data);
     if (!newTask) throw new Error("Project not found for task creation or task creation failed.");
 
-    const project = await getProjectById(projectId); // Fetch project for name
-    const projectName = project ? project.name : `Project ID ${projectId}`;
-    addActivityLog({ type: 'task', action: 'created', description: `Created Task: ${newTask.name} in Project ${projectName}` });
-
     revalidatePath(`/projects/${projectId}`);
     revalidatePath("/dashboard"); // If dashboard shows task counts etc.
     return newTask;
@@ -96,31 +88,13 @@ export async function createTaskAction(projectId: string, data: Omit<Task, "id" 
 
 export async function updateTaskAction(projectId: string, taskId: string, data: Partial<Omit<Task, "id" | "projectId" | "createdAt" | "updatedAt">>) {
   try {
-    const project = await getProjectById(projectId);
-    if (!project) throw new Error("Project not found for task update.");
-
-    const taskIndex = project.tasks.findIndex(t => t.id === taskId);
-    if (taskIndex === -1) throw new Error("Task not found for update.");
-
-    const originalStatus = project.tasks[taskIndex].status;
-    const taskName = project.tasks[taskIndex].name;
-
     const updatedTask = await updateTask(projectId, taskId, data);
-    if (!updatedTask) throw new Error("Task update failed.");
-
-    // Add activity log based on what changed
-    if (data.status && data.status !== originalStatus) {
-        addActivityLog({ type: 'task', action: 'updated', description: `Updated Task Status: ${taskName} to ${updatedTask.status}` });
-        if (updatedTask.status === 'done') {
-            addActivityLog({ type: 'task', action: 'completed', description: `Completed Task: ${taskName}` });
-        }
-    } else {
-        addActivityLog({ type: 'task', action: 'updated', description: `Updated Task: ${taskName}` });
-    }
+    if (!updatedTask) throw new Error("Task not found for update or update failed.");
 
     revalidatePath(`/projects/${projectId}`);
     revalidatePath("/time-tracking"); // Also update time tracking if tasks are listed
     revalidatePath("/client-portal"); // Update client portal if tasks are shown there
+    revalidatePath("/dashboard");
     return updatedTask;
   } catch (error) {
     console.error("Failed to update task:", error);
@@ -130,16 +104,9 @@ export async function updateTaskAction(projectId: string, taskId: string, data: 
 
 export async function deleteTaskAction(projectId: string, taskId: string) {
   try {
-    // Fetch task/project name before deleting for logging
-    const project = await getProjectById(projectId);
-    const task = project?.tasks.find(t => t.id === taskId);
-    const taskName = task ? task.name : `Task ID ${taskId}`;
-    const projectName = project ? project.name : `Project ID ${projectId}`;
-
     const success = await deleteTaskData(projectId, taskId);
     if (!success) throw new Error("Failed to delete task or task not found.");
 
-    addActivityLog({ type: 'task', action: 'deleted', description: `Deleted Task: ${taskName} from Project ${projectName}` });
     revalidatePath(`/projects/${projectId}`);
     revalidatePath("/dashboard");
     revalidatePath("/time-tracking"); // Update time tracking
@@ -151,34 +118,14 @@ export async function deleteTaskAction(projectId: string, taskId: string) {
 }
 
 // New Action: Approve Task (from Client Portal)
-export async function approveTaskAction(taskId: string) {
-    // Need projectId to update the correct project store
-    // In a real DB, you'd fetch the task directly and get projectId
-    // For dummy data, we need to find the project containing the task
-    let projectId: string | undefined;
-    let taskToApprove: Task | undefined;
-
-    for (const project of await getProjects()) {
-        const foundTask = project.tasks.find(t => t.id === taskId);
-        if (foundTask) {
-            projectId = project.id;
-            taskToApprove = foundTask;
-            break;
-        }
-    }
-
-    if (!projectId || !taskToApprove) {
-        throw new Error("Task not found for approval.");
-    }
-
+export async function approveTaskAction(projectId: string, taskId: string) {
     try {
-        // Update task status to 'done' or a specific 'approved' status if needed
-        // For simplicity, let's assume approval means 'done'
+        // Update task status to 'done' when client approves
         const updatedTask = await updateTask(projectId, taskId, { status: 'done' });
         if (!updatedTask) throw new Error("Failed to approve task.");
 
         // Add specific activity log for approval
-        addActivityLog({ type: 'task', action: 'approved', description: `Client approved Task: ${updatedTask.name}` });
+        await addActivityLog({ type: 'task', action: 'approved', description: `Client approved Task: ${updatedTask.name}` });
 
         revalidatePath(`/projects/${projectId}`);
         revalidatePath("/client-portal");
@@ -193,13 +140,12 @@ export async function approveTaskAction(taskId: string) {
 
 // Invoice Actions
 // Type for invoice creation payload, excluding fields generated by the server/DB
-// Include status here as the form might decide to send immediately
-type CreateInvoicePayload = Omit<Invoice, "id" | "invoiceNumber" | "createdAt" | "updatedAt"> & { status: Invoice['status'] };
+type CreateInvoicePayload = Omit<Invoice, "id" | "invoiceNumber" | "createdAt" | "updatedAt" | "uid"> & { status: Invoice['status'] };
 
 export async function createInvoiceAction(data: CreateInvoicePayload) {
   try {
     const newInvoice = await createInvoice(data);
-    addActivityLog({ type: 'invoice', action: 'created', description: `Created Invoice: ${newInvoice.invoiceNumber}` });
+
     revalidatePath("/invoices");
     revalidatePath("/dashboard");
 
@@ -211,9 +157,6 @@ export async function createInvoiceAction(data: CreateInvoicePayload) {
        } catch (emailError) {
           console.error(`Invoice ${newInvoice.invoiceNumber} created, but failed to send email:`, emailError);
           // Decide if you want to revert the status or just log the error
-          // For now, we'll leave the status as 'sent' but log the error
-          // Optionally, update the invoice status back to 'draft' here
-          // await updateInvoice(newInvoice.id, { status: 'draft', notes: `Failed to send initial email. ${newInvoice.notes || ''}` });
        }
     }
 
@@ -225,7 +168,7 @@ export async function createInvoiceAction(data: CreateInvoicePayload) {
 }
 
 // Type for invoice update payload
-type UpdateInvoicePayload = Partial<Omit<Invoice, "id" | "invoiceNumber" | "createdAt" | "updatedAt">>;
+type UpdateInvoicePayload = Partial<Omit<Invoice, "id" | "invoiceNumber" | "createdAt" | "updatedAt" | "uid">>;
 
 export async function updateInvoiceAction(id: string, data: UpdateInvoicePayload) {
   try {
@@ -235,13 +178,6 @@ export async function updateInvoiceAction(id: string, data: UpdateInvoicePayload
 
     const updatedInvoice = await updateInvoice(id, data);
     if (!updatedInvoice) throw new Error("Invoice update failed internally.");
-
-    // Log status change or general update
-    if (data.status && data.status !== originalStatus) {
-        addActivityLog({ type: 'invoice', action: 'updated', description: `Updated Invoice Status: ${updatedInvoice.invoiceNumber} to ${updatedInvoice.status}` });
-    } else {
-        addActivityLog({ type: 'invoice', action: 'updated', description: `Updated Invoice: ${updatedInvoice.invoiceNumber}` });
-    }
 
     revalidatePath("/invoices");
     revalidatePath(`/invoices/${id}`);
@@ -270,12 +206,10 @@ export async function deleteInvoiceAction(id: string) {
   try {
      const invoice = await getInvoiceById(id);
      if (!invoice) throw new Error("Invoice not found for deletion.");
-     const invoiceNumber = invoice.invoiceNumber;
 
     const success = await deleteInvoiceData(id);
     if (!success) throw new Error("Failed to delete invoice.");
 
-    addActivityLog({ type: 'invoice', action: 'deleted', description: `Deleted Invoice: ${invoiceNumber}` });
     revalidatePath("/invoices");
     revalidatePath("/dashboard");
     revalidatePath("/client-portal"); // Update client portal
@@ -293,7 +227,7 @@ export async function sendInvoiceEmailAction(invoiceId: string, clientEmail: str
     }
 
     // Ensure invoice status is 'sent' or 'overdue' or 'draft' before sending/resending
-     if (invoice.status !== 'sent' && invoice.status !== 'overdue' && invoice.status !== 'draft') { // Allow sending from draft too
+     if (invoice.status !== 'sent' && invoice.status !== 'overdue' && invoice.status !== 'draft') {
        throw new Error(`Cannot send email for invoice with status: ${invoice.status}`);
      }
 
@@ -317,10 +251,7 @@ export async function sendInvoiceEmailAction(invoiceId: string, clientEmail: str
       html: emailHtml,
     });
 
-     // Add activity log for sending
-     addActivityLog({ type: 'invoice', action: 'sent', description: `Sent Invoice: ${invoice.invoiceNumber} to ${clientEmail}` });
-
-    // Update invoice status to 'sent' if it was 'draft'
+     // Update invoice status to 'sent' if it was 'draft'
     if (invoice.status === 'draft') {
       await updateInvoice(invoiceId, { status: 'sent' });
        revalidatePath("/invoices");
@@ -333,20 +264,18 @@ export async function sendInvoiceEmailAction(invoiceId: string, clientEmail: str
   } catch (error) {
     console.error("Failed to send invoice email:", error);
     const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-    // No need to return success:false here, the caller will catch the throw
     throw new Error(`Failed to send invoice: ${errorMessage}`);
   }
 }
 
 // Time Tracking Actions (Updated to work with subcollections)
-export async function createTimeEntryAction(data: Omit<TimeEntry, 'id' | 'createdAt' | 'updatedAt'>) {
+export async function createTimeEntryAction(data: Omit<TimeEntry, 'id' | 'createdAt' | 'updatedAt' | 'uid'>) {
   try {
     if (!data.projectId) {
       throw new Error("Project ID is required for time entries");
     }
     
     const newEntry = await createTimeEntry(data);
-    // Format duration for log message (handled in createTimeEntry function)
     
     revalidatePath("/time-tracking");
     revalidatePath("/dashboard"); // If dashboard shows hours tracked

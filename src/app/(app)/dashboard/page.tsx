@@ -2,12 +2,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Briefcase, FileText, PlusCircle, ArrowRight, Clock, CalendarCheck2, List, AlertTriangle, Bell } from "lucide-react";
-import type { Project, Invoice, Task, ActivityLog } from '@/lib/definitions';
-import { getProjects, getInvoices, getWeeklyHoursTracked, getUpcomingTasks, getRecentActivity } from '@/lib/definitions';
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Progress } from "@/components/ui/progress"; // Import Progress component
+import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { formatDistanceToNow, format } from 'date-fns';
+import { format } from "date-fns";
+import { 
+  getProjects, 
+  getInvoices, 
+  getWeeklyHoursTracked, 
+  getUpcomingTasks, 
+  getRecentActivity 
+} from '@/lib/db-models';
 
 // Fetch all necessary data for the dashboard
 async function getDashboardData() {
@@ -21,11 +25,10 @@ async function getDashboardData() {
   const pendingInvoices = allInvoices.filter(inv => inv.status === 'sent' || inv.status === 'overdue');
   const pendingInvoicesTotal = pendingInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
 
-  // Calculate overall project progress (simplified example)
+  // Calculate overall project progress
   const totalTasks = activeProjects.reduce((sum, p) => sum + p.tasks.length, 0);
   const completedTasks = activeProjects.reduce((sum, p) => sum + p.tasks.filter(t => t.status === 'done').length, 0);
   const overallProgress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-
 
   return {
     activeProjectsCount: activeProjects.length,
@@ -41,7 +44,7 @@ async function getDashboardData() {
 // Helper to format relative time
 const formatRelativeTime = (dateString: string): string => {
   try {
-    return formatDistanceToNow(new Date(dateString), { addSuffix: true });
+    return format(new Date(dateString), 'PPp');
   } catch (e) {
     console.error("Error formatting date:", dateString, e);
     return "Invalid date";
@@ -61,8 +64,6 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      {/* Header is now part of AppLayout */}
-
       {/* Overview Section */}
       <section>
         <h2 className="text-2xl font-semibold text-foreground mb-4">Overview</h2>
@@ -108,13 +109,12 @@ export default async function DashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="text-3xl font-bold text-foreground">{weeklyHours.toFixed(1)}h</div>
-               <p className="text-xs text-muted-foreground mt-1">Based on manual entries</p>
-               {/* Link to Time Tracking Page - uncomment when ready */}
-               {/* <Link href="/time-tracking" className="block mt-3"> */}
-                 <Button variant="secondary" size="sm" className="mt-3 w-full sm:w-auto" disabled> {/* Button disabled until page exists */}
+               <p className="text-xs text-muted-foreground mt-1">Based on time entries</p>
+               <Link href="/time-tracking" className="block mt-3">
+                 <Button variant="secondary" size="sm" className="w-full sm:w-auto">
                     Track Time
                  </Button>
-              {/* </Link> */}
+              </Link>
             </CardContent>
           </Card>
 
@@ -127,7 +127,7 @@ export default async function DashboardPage() {
             <CardContent>
                {upcomingTasks.length > 0 ? (
                 <ul className="space-y-2">
-                  {upcomingTasks.map((task: Task) => (
+                  {upcomingTasks.map((task) => (
                     <li key={task.id} className="text-sm">
                       <Link href={`/projects/${task.projectId}`} className="font-medium text-foreground hover:underline">{task.name}</Link>
                       <p className="text-xs text-muted-foreground">
@@ -153,26 +153,24 @@ export default async function DashboardPage() {
          <Card className="shadow-md border-border">
             <CardContent className="p-0">
             {recentActivity.length > 0 ? (
-                 <ScrollArea className="h-[250px]">
-                    <ul className="divide-y divide-border">
-                        {recentActivity.map((activity: ActivityLog) => (
-                        <li key={activity.id} className="flex items-center justify-between p-4 hover:bg-muted/50 transition-colors">
-                           <div className="flex items-center gap-3">
-                             <div className="p-2 bg-muted rounded-full">
-                                {activity.type === 'project' && <Briefcase className="h-4 w-4 text-muted-foreground" />}
-                                {activity.type === 'task' && <List className="h-4 w-4 text-muted-foreground" />}
-                                {activity.type === 'invoice' && <FileText className="h-4 w-4 text-muted-foreground" />}
-                             </div>
-                             <div>
-                                <p className="text-sm font-medium text-foreground">{activity.description}</p>
-                                <p className="text-xs text-muted-foreground">{formatRelativeTime(activity.timestamp)}</p>
-                             </div>
-                           </div>
-                           {/* Optional: Add an action button or link */}
-                         </li>
-                        ))}
-                    </ul>
-                 </ScrollArea>
+                 <ul className="divide-y divide-border">
+                    {recentActivity.map((activity) => (
+                    <li key={activity.id} className="flex items-center justify-between p-4 hover:bg-muted/50 transition-colors">
+                       <div className="flex items-center gap-3">
+                         <div className="p-2 bg-muted rounded-full">
+                            {activity.type === 'project' && <Briefcase className="h-4 w-4 text-muted-foreground" />}
+                            {activity.type === 'task' && <List className="h-4 w-4 text-muted-foreground" />}
+                            {activity.type === 'invoice' && <FileText className="h-4 w-4 text-muted-foreground" />}
+                            {activity.type === 'time' && <Clock className="h-4 w-4 text-muted-foreground" />}
+                         </div>
+                         <div>
+                            <p className="text-sm font-medium text-foreground">{activity.description}</p>
+                            <p className="text-xs text-muted-foreground">{formatRelativeTime(activity.timestamp)}</p>
+                         </div>
+                       </div>
+                     </li>
+                    ))}
+                </ul>
               ) : (
                 <div className="flex flex-col items-center justify-center h-[250px] text-center p-6">
                   <Bell className="h-10 w-10 text-muted-foreground mb-3" />
@@ -184,7 +182,7 @@ export default async function DashboardPage() {
          </Card>
        </section>
 
-        {/* Optional: Quick Actions */}
+        {/* Quick Actions */}
        <section>
          <div className="flex flex-wrap gap-4">
             <Link href="/projects/new">
@@ -197,18 +195,8 @@ export default async function DashboardPage() {
                 <PlusCircle className="mr-2 h-4 w-4" /> New Invoice
               </Button>
             </Link>
-              {/* Add more quick actions as needed */}
          </div>
        </section>
     </div>
   );
 }
-
-// Define Progress indicatorClassName type explicitly if needed, or rely on inference
-interface ProgressProps extends React.ComponentPropsWithoutRef<typeof Progress> {
-  indicatorClassName?: string;
-}
-
-const CustomProgress = ({ indicatorClassName, ...props }: ProgressProps) => (
-  <Progress {...props} />
-);

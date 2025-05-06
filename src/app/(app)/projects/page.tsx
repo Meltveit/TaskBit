@@ -1,4 +1,3 @@
-
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import {
@@ -9,16 +8,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Card, CardContent } from '@/components/ui/card'; // Keep Card for the empty state
-import { PlusCircle, Edit, Trash2, Briefcase as LucideBriefcase, List, KanbanSquare } from 'lucide-react'; // Renamed imported icon
-import type { Project, Task } from '@/lib/definitions';
-import { getProjects } from '@/lib/definitions';
+import { Card, CardContent } from '@/components/ui/card';
+import { PlusCircle, Edit, Trash2, Briefcase, List, KanbanSquare } from 'lucide-react';
+import { getProjects } from '@/lib/db-models';
 import { Badge } from '@/components/ui/badge';
 import { DeleteProjectButton } from '@/components/delete-buttons';
 import { format } from 'date-fns';
 
 // Helper function to determine project deadline (e.g., latest task due date)
-const getProjectDeadline = (tasks: Task[]): string | null => {
+const getProjectDeadline = (tasks: any[]): string | null => {
   if (!tasks || tasks.length === 0) return null;
 
   const dueDates = tasks
@@ -32,22 +30,21 @@ const getProjectDeadline = (tasks: Task[]): string | null => {
 };
 
 // Helper function to calculate task completion
-const getTasksCompleted = (tasks: Task[]): string => {
+const getTasksCompleted = (tasks: any[]): string => {
   if (!tasks || tasks.length === 0) return "0/0";
   const completed = tasks.filter(task => task.status === 'done').length;
   return `${completed}/${tasks.length}`;
 };
 
 // Helper to get status badge variant
-const statusBadgeVariant = (status: Project['status']) => {
+const statusBadgeVariant = (status: 'active' | 'completed' | 'archived') => {
     switch (status) {
-      case 'active': return 'bg-green-100 text-green-800 border-green-300 hover:bg-green-200'; // Use lighter background for tags
+      case 'active': return 'bg-green-100 text-green-800 border-green-300 hover:bg-green-200';
       case 'completed': return 'bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-200';
       case 'archived': return 'bg-gray-100 text-gray-800 border-gray-300 hover:bg-gray-200';
       default: return 'outline';
     }
   };
-
 
 export default async function ProjectsPage() {
   const projects = await getProjects();
@@ -63,7 +60,6 @@ export default async function ProjectsPage() {
             Toggle View
           </Button>
           <Link href="/projects/new">
-            {/* Updated button style to use accent color */}
             <Button className="bg-accent hover:bg-accent/90 text-accent-foreground">
               <PlusCircle className="mr-2 h-4 w-4" /> Create New Project
             </Button>
@@ -110,7 +106,6 @@ export default async function ProjectsPage() {
                   <TableCell className="text-muted-foreground">{format(new Date(project.updatedAt), 'PP')}</TableCell>
                   <TableCell className="text-right">
                      <div className="flex justify-end gap-2">
-                       {/* Edit button styled as secondary (Teal) */}
                       <Link href={`/projects/${project.id}/edit`}>
                         <Button variant="secondary" size="sm">
                           <Edit className="mr-1 h-4 w-4" /> Edit
@@ -127,12 +122,10 @@ export default async function ProjectsPage() {
       ) : (
         <Card className="col-span-full text-center py-12 shadow-md">
           <CardContent>
-            {/* Use the renamed local SVG component */}
-            <BriefcaseIconHelper className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+            <Briefcase className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
             <h3 className="text-xl font-semibold mb-2 text-foreground">No Projects Yet</h3>
             <p className="text-muted-foreground mb-4">Start by creating your first project.</p>
             <Link href="/projects/new">
-              {/* Updated button style to use accent color */}
               <Button className="bg-accent hover:bg-accent/90 text-accent-foreground">
                 <PlusCircle className="mr-2 h-4 w-4" /> Create Project
               </Button>
@@ -143,25 +136,3 @@ export default async function ProjectsPage() {
     </div>
   );
 }
-
-// Renamed the local SVG component to avoid conflict
-function BriefcaseIconHelper(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <rect width="20" height="14" x="2" y="7" rx="2" ry="2" />
-      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
-    </svg>
-  )
-}
-
