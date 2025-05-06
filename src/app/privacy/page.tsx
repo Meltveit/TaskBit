@@ -1,9 +1,23 @@
 
+"use client"; // Make it a client component to use hooks
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button'; // Import Button
+import { ArrowLeft } from 'lucide-react'; // Import icon
+import { useRouter } from 'next/navigation'; // Import router hook
 
 export default function PrivacyPolicyPage() {
+  const router = useRouter(); // Initialize router
+
   return (
     <div className="container mx-auto px-4 py-8 sm:px-6 lg:px-8 max-w-4xl">
+       {/* Back Button */}
+       <div className="mb-6">
+         <Button variant="outline" onClick={() => router.back()}>
+           <ArrowLeft className="mr-2 h-4 w-4" /> Back
+         </Button>
+       </div>
+
       <Card className="shadow-lg border-border/60">
         <CardHeader>
           <CardTitle className="text-3xl font-bold text-primary">Privacy Policy</CardTitle>
