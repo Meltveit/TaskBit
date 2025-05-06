@@ -3,20 +3,30 @@ const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 
 // Use environment variables managed by Firebase Functions config
+// IMPORTANT: This is the ONLY place the Stripe secret key should be configured.
+// Run `firebase functions:config:set stripe.secret_key="YOUR_STRIPE_SECRET_KEY"` in your terminal.
 const stripeSecretKey = functions.config().stripe?.secret_key;
 if (!stripeSecretKey) {
-  console.error("FATAL ERROR: Stripe secret key is not configured. Run 'firebase functions:config:set stripe.secret_key=\"YOUR_STRIPE_SECRET_KEY\"'");
+  console.error("FATAL ERROR: Stripe secret key is not configured in Firebase Functions config.");
+  console.error("Run: firebase functions:config:set stripe.secret_key=\"YOUR_STRIPE_SECRET_KEY\"");
+  // Optionally, prevent functions from deploying/running if the key is missing
+  // throw new Error("Stripe secret key is not configured.");
 }
-const stripe = require("stripe")(stripeSecretKey);
+// Initialize Stripe ONLY if the key exists
+const stripe = stripeSecretKey ? require("stripe")(stripeSecretKey) : null;
 
 admin.initializeApp();
 
 // Create Stripe Checkout Session
-// Creates a Stripe Checkout session for a user to subscribe to a plan.
-// Requires authentication and a priceId (e.g., price_xyz).
 exports.createCheckoutSession = functions.region("us-central1").https.onCall(async (data, context) => {
-  if (!stripeSecretKey) throw new functions.https.HttpsError("internal", "Stripe is not configured.");
-  if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
+  // Ensure Stripe is initialized (key was present at deployment)
+  if (!stripe) {
+      console.error("Stripe initialization failed - secret key likely missing in config.");
+      throw new functions.https.HttpsError("internal", "Stripe is not configured correctly. Please check server logs.");
+  }
+  if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
+  }
 
   const { priceId, successUrl, cancelUrl } = data; // Get URLs from the client call
   if (!priceId || !successUrl || !cancelUrl) {
@@ -68,23 +78,24 @@ exports.createCheckoutSession = functions.region("us-central1").https.onCall(asy
 });
 
 // Handle Stripe Webhooks
-// Listens for events from Stripe (e.g., subscription created, invoice paid).
-// Requires webhook secret configured in Firebase environment variables.
-// Example: firebase functions:config:set stripe.webhook_secret="whsec_..."
+// IMPORTANT: Set the webhook secret in Firebase config:
+// `firebase functions:config:set stripe.webhook_secret="YOUR_STRIPE_WEBHOOK_SECRET"`
 const webhookSecret = functions.config().stripe?.webhook_secret;
 
 exports.stripeWebhook = functions.region("us-central1").https.onRequest(async (req, res) => {
   const sig = req.headers["stripe-signature"];
   let event;
 
+  // Ensure Stripe is initialized (key was present at deployment)
+  if (!stripe) {
+      console.error("Stripe initialization failed for webhook - secret key likely missing in config.");
+      return res.status(500).send("Webhook configuration error.");
+  }
   if (!webhookSecret) {
-    console.error("Stripe webhook secret is not configured. Run 'firebase functions:config:set stripe.webhook_secret=\"YOUR_STRIPE_WEBHOOK_SECRET\"'");
+    console.error("Stripe webhook secret is not configured in Firebase Functions config.");
+    console.error("Run: firebase functions:config:set stripe.webhook_secret=\"YOUR_STRIPE_WEBHOOK_SECRET\"");
     return res.status(500).send("Webhook configuration error.");
   }
-   if (!stripeSecretKey) {
-     console.error("Stripe secret key is not configured for webhook processing.");
-     return res.status(500).send("Webhook configuration error.");
-   }
 
   try {
     event = stripe.webhooks.constructEvent(req.rawBody, sig, webhookSecret);
@@ -120,6 +131,7 @@ exports.stripeWebhook = functions.region("us-central1").https.onRequest(async (r
 
         console.log(`Updating user ${firebaseUID} with plan ${plan} and subscription ${subscriptionId}`);
 
+        // Update subscription subcollection
         await userRef.collection("subscriptions").doc(subscriptionId).set({
           subscriptionId: subscription.id,
           planId: priceData?.id || 'unknown', // Store price ID
@@ -128,8 +140,6 @@ exports.stripeWebhook = functions.region("us-central1").https.onRequest(async (r
           current_period_start: admin.firestore.Timestamp.fromDate(new Date(subscription.current_period_start * 1000)),
           current_period_end: admin.firestore.Timestamp.fromDate(new Date(subscription.current_period_end * 1000)),
           cancel_at_period_end: subscription.cancel_at_period_end,
-          // Storing minimal payment info might be useful, but be cautious
-          // paymentMethodDetails: subscription.default_payment_method ? { type: 'card', last4: '****' } : null, // Placeholder
         }, { merge: true });
 
         // Update top-level user plan and custom claims
@@ -151,6 +161,7 @@ exports.stripeWebhook = functions.region("us-central1").https.onRequest(async (r
 
          if (userPaidDoc) {
              const userIdPaid = userPaidDoc.id;
+             // Record invoice in a subcollection for the user
              await db.collection("users").doc(userIdPaid).collection("invoices").doc(invoice.id).set({
                  amount: invoice.amount_paid / 100, // Store amount in dollars
                  status: invoice.status,
@@ -271,8 +282,6 @@ exports.stripeWebhook = functions.region("us-central1").https.onRequest(async (r
         }
         break;
 
-      // Add other relevant events like customer.subscription.updated, deleted, etc.
-
       default:
         console.log(`Unhandled event type ${event.type}`);
     }
@@ -286,11 +295,15 @@ exports.stripeWebhook = functions.region("us-central1").https.onRequest(async (r
 });
 
 // Create Stripe Customer Portal Session
-// Generates a URL for the user to manage their subscription in Stripe Billing Portal.
-// Requires authentication.
 exports.createPortalSession = functions.region("us-central1").https.onCall(async (data, context) => {
-  if (!stripeSecretKey) throw new functions.https.HttpsError("internal", "Stripe is not configured.");
-  if (!context.auth) throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
+  // Ensure Stripe is initialized (key was present at deployment)
+  if (!stripe) {
+      console.error("Stripe initialization failed - secret key likely missing in config.");
+      throw new functions.https.HttpsError("internal", "Stripe is not configured correctly. Please check server logs.");
+  }
+  if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "User must be logged in.");
+  }
 
   const { returnUrl } = data; // Get return URL from client
   if (!returnUrl) {
@@ -325,12 +338,22 @@ exports.createPortalSession = functions.region("us-central1").https.onCall(async
 // Sync Stripe Products and Prices to Firestore
 // Manually triggerable function (or run on schedule) to keep Firestore products/prices in sync with Stripe.
 exports.syncStripeProducts = functions.region("us-central1").https.onRequest(async (req, res) => {
-  if (!stripeSecretKey) {
-     console.error("Stripe is not configured for product sync.");
+ // Ensure Stripe is initialized (key was present at deployment)
+  if (!stripe) {
+     console.error("Stripe initialization failed for product sync - secret key likely missing in config.");
      return res.status(500).send("Configuration error.");
    }
   // Optional: Add authentication/authorization check if needed
-  // if (!isAdmin(req)) return res.status(403).send("Unauthorized");
+  // Example: Check if user is admin via custom claims
+  // const tokenId = req.get('Authorization')?.split('Bearer ')[1];
+  // if (!tokenId) return res.status(401).send('Unauthorized');
+  // try {
+  //   const decodedToken = await admin.auth().verifyIdToken(tokenId);
+  //   if (!decodedToken.admin) return res.status(403).send('Forbidden'); // Assuming an 'admin' custom claim
+  // } catch (error) {
+  //   return res.status(401).send('Unauthorized');
+  // }
+
 
   console.log("Starting Stripe product sync...");
   const db = admin.firestore();
