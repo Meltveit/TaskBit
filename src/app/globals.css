@@ -8,7 +8,7 @@ body {
 
 @layer base {
   :root {
-    --background: 210 40% 98%; /* Clean White (Approximation, as HSL doesn't map directly to #FFFFFF) */
+    --background: 0 0% 100%; /* Clean White (#FFFFFF) */
     --foreground: 222 47% 11%; /* Dark Gray (#374151) */
 
     --card: 0 0% 100%; /* Clean White (#FFFFFF) */
@@ -18,16 +18,16 @@ body {
     --popover-foreground: 222 47% 11%; /* Dark Gray (#374151) */
 
     --primary: 221 63% 33%; /* Deep Blue (#1E3A8A) */
-    --primary-foreground: 0 0% 100%; /* White */
+    --primary-foreground: 0 0% 100%; /* White for text on Deep Blue */
 
     --secondary: 170 66% 52%; /* Soft Teal (#2DD4BF) */
-    --secondary-foreground: 222 47% 11%; /* Dark Gray for contrast */
+    --secondary-foreground: 222 47% 11%; /* Dark Gray for text on Soft Teal */
 
     --muted: 215 28% 93%; /* Light Gray (#E5E7EB) */
     --muted-foreground: 222 47% 11%; /* Dark Gray */
 
     --accent: 43 95% 57%; /* Warm Yellow (#FBBF24) */
-    --accent-foreground: 222 47% 11%; /* Dark Gray for contrast */
+    --accent-foreground: 222 47% 11%; /* Dark Gray for text on Warm Yellow */
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
@@ -107,5 +107,11 @@ body {
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
   }
 }
